@@ -1,0 +1,71 @@
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+
+export interface FirebaseConfigParams {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  databaseURL?: string;
+}
+
+// Read from import.meta.env or localStorage
+const getSavedConfig = (): FirebaseConfigParams => {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('farmerbox_firebase_config');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Error reading stored Firebase config', e);
+    }
+  }
+
+  return {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+    databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || ''
+  };
+};
+
+export const currentFirebaseConfig = getSavedConfig();
+
+export const isFirebaseConfigured = (): boolean => {
+  return Boolean(
+    currentFirebaseConfig.apiKey &&
+    currentFirebaseConfig.projectId &&
+    currentFirebaseConfig.appId
+  );
+};
+
+let app: FirebaseApp | null = null;
+let db: Firestore | null = null;
+
+if (isFirebaseConfigured()) {
+  try {
+    app = getApps().length === 0 ? initializeApp(currentFirebaseConfig) : getApps()[0];
+    db = getFirestore(app);
+  } catch (err) {
+    console.error('Failed to initialize Firebase app:', err);
+  }
+}
+
+export { app, db };
+
+export const saveCustomFirebaseConfig = (config: FirebaseConfigParams): boolean => {
+  try {
+    localStorage.setItem('farmerbox_firebase_config', JSON.stringify(config));
+    window.location.reload();
+    return true;
+  } catch (e) {
+    console.error('Failed to save Firebase config:', e);
+    return false;
+  }
+};
