@@ -3,7 +3,18 @@ import { UserCheck, Truck, CheckCircle2, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const DeliveryOverview: React.FC = () => {
-  const { setActiveTab } = useApp();
+  const { setActiveTab, drivers, orders, isDatabaseConnected } = useApp();
+
+  const totalDrivers = isDatabaseConnected ? drivers.length : 45;
+  const availableDrivers = isDatabaseConnected
+    ? drivers.filter(d => d.status === 'Active').length
+    : 12;
+  const outForDelivery = isDatabaseConnected
+    ? orders.filter(o => o.status === 'Out for Delivery').length
+    : 18;
+  const completedToday = isDatabaseConnected
+    ? orders.filter(o => o.status === 'Delivered').length
+    : 35;
 
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between h-full">
@@ -27,7 +38,7 @@ export const DeliveryOverview: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] font-semibold text-slate-500">Total Drivers</p>
-            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">45</h4>
+            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">{totalDrivers}</h4>
           </div>
         </div>
 
@@ -40,7 +51,7 @@ export const DeliveryOverview: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] font-semibold text-slate-500">Available</p>
-            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">12</h4>
+            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">{availableDrivers}</h4>
           </div>
         </div>
 
@@ -53,7 +64,7 @@ export const DeliveryOverview: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] font-semibold text-slate-500">Out for Delivery</p>
-            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">18</h4>
+            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">{outForDelivery}</h4>
           </div>
         </div>
 
@@ -66,7 +77,7 @@ export const DeliveryOverview: React.FC = () => {
           </div>
           <div>
             <p className="text-[10px] font-semibold text-slate-500">Completed Today</p>
-            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">35</h4>
+            <h4 className="text-xl font-extrabold text-slate-800 leading-tight">{completedToday}</h4>
           </div>
         </div>
       </div>

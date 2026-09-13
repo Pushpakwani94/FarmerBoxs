@@ -24,7 +24,8 @@ import {
   subscribeToCollection,
   saveRecord,
   deleteRecord,
-  seedFirestoreDatabase
+  seedFirestoreDatabase,
+  clearLocalDummyCache
 } from '../firebase/dbService';
 import { isFirebaseConfigured } from '../firebase/config';
 
@@ -117,6 +118,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const isConnected = isFirebaseConfigured();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [joiners, setJoiners] = useState<Joiner[]>([]);
@@ -126,31 +129,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Subscriptions to Realtime Database
+  // Subscriptions to Realtime Database (Dummy data removed if Firebase is connected)
   useEffect(() => {
-    const unsubOrders = subscribeToCollection<Order>('orders', initialOrders, setOrders);
-    const unsubZones = subscribeToCollection<Zone>('zones', initialZones, (z) => {
+    // If Firebase is active, purge any old mock data from local storage
+    if (isConnected) {
+      clearLocalDummyCache();
+    }
+
+    const unsubOrders = subscribeToCollection<Order>('orders', isConnected ? [] : initialOrders, setOrders);
+    const unsubZones = subscribeToCollection<Zone>('zones', isConnected ? [] : initialZones, (z) => {
       setZones(z);
-      if (!selectedZone && z.length > 0) setSelectedZone(z[0]);
+      setSelectedZone(prev => prev ? (z.find(item => String(item.id) === String(prev.id)) || z[0] || null) : (z[0] || null));
     });
-    const unsubJoiners = subscribeToCollection<Joiner>('joiners', initialJoiners, (j) => {
+    const unsubJoiners = subscribeToCollection<Joiner>('joiners', isConnected ? [] : initialJoiners, (j) => {
       setJoiners(j);
-      if (!selectedJoiner && j.length > 0) setSelectedJoiner(j[0]);
+      setSelectedJoiner(prev => prev ? (j.find(item => String(item.id) === String(prev.id)) || j[0] || null) : (j[0] || null));
     });
-    const unsubDrivers = subscribeToCollection<Driver>('drivers', initialDriversList, (d) => {
+    const unsubDrivers = subscribeToCollection<Driver>('drivers', isConnected ? [] : initialDriversList, (d) => {
       setDrivers(d);
-      if (!selectedDriver && d.length > 0) setSelectedDriver(d[0]);
+      setSelectedDriver(prev => prev ? (d.find(item => String(item.id) === String(prev.id)) || d[0] || null) : (d[0] || null));
     });
-    const unsubHotels = subscribeToCollection<Hotel>('hotels', initialHotels, (h) => {
+    const unsubHotels = subscribeToCollection<Hotel>('hotels', isConnected ? [] : initialHotels, (h) => {
       setHotels(h);
-      if (!selectedHotel && h.length > 0) setSelectedHotel(h[0]);
+      setSelectedHotel(prev => prev ? (h.find(item => String(item.id) === String(prev.id)) || h[0] || null) : (h[0] || null));
     });
-    const unsubProducts = subscribeToCollection<Product>('products', initialProductsList, (p) => {
+    const unsubProducts = subscribeToCollection<Product>('products', isConnected ? [] : initialProductsList, (p) => {
       setProducts(p);
-      if (!selectedProduct && p.length > 0) setSelectedProduct(p[0]);
+      setSelectedProduct(prev => prev ? (p.find(item => String(item.id) === String(prev.id)) || p[0] || null) : (p[0] || null));
     });
-    const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', initialPayments, setPayments);
-    const unsubNotifs = subscribeToCollection<NotificationItem>('notifications', initialNotifications, setNotifications);
+    const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', isConnected ? [] : initialPayments, setPayments);
+    const unsubNotifs = subscribeToCollection<NotificationItem>('notifications', isConnected ? [] : initialNotifications, setNotifications);
 
     return () => {
       unsubOrders();
@@ -162,16 +170,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unsubPayments();
       unsubNotifs();
     };
-  }, []);
+  }, [isConnected]);
 
   const [activeTab, setActiveTab] = useState<string>('Dashboard');
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedZone, setSelectedZone] = useState<Zone | null>(initialZones[0]);
-  const [selectedJoiner, setSelectedJoiner] = useState<Joiner | null>(initialJoiners[0]);
-  const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(initialHotels[0]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(initialProductsList[0]);
-  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(initialDriversList[0]);
+  const [selectedZone, setSelectedZone] = useState<Zone | null>(isConnected ? null : initialZones[0]);
+  const [selectedJoiner, setSelectedJoiner] = useState<Joiner | null>(isConnected ? null : initialJoiners[0]);
+  const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(isConnected ? null : initialHotels[0]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(isConnected ? null : initialProductsList[0]);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(isConnected ? null : initialDriversList[0]);
 
   const [isAddHotelOpen, setIsAddHotelOpen] = useState(false);
   const [isAddJoinerOpen, setIsAddJoinerOpen] = useState(false);

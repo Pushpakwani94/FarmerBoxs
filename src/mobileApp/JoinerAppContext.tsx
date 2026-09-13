@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { soundEngine } from './utils/sound';
 import { subscribeToCollection, saveRecord } from '../firebase/dbService';
+import { isFirebaseConfigured } from '../firebase/config';
 
 export type MobileScreen =
   | 'WELCOME'
@@ -225,24 +226,29 @@ const defaultNotifications: MobileNotification[] = [
 const JoinerAppContext = createContext<JoinerAppContextType | undefined>(undefined);
 
 export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const isConnected = isFirebaseConfigured();
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('DASHBOARD');
-  const [hotels, setHotels] = useState<MobileHotel[]>(defaultHotels);
-  const [selectedHotel, setSelectedHotel] = useState<MobileHotel | null>(defaultHotels[0]);
-  const [products, setProducts] = useState<MobileProduct[]>(defaultProducts);
-  const [cart, setCart] = useState<CartItem[]>(defaultInitialCart);
-  const [orders, setOrders] = useState<MobileOrder[]>(defaultOrders);
+  const [hotels, setHotels] = useState<MobileHotel[]>(isConnected ? [] : defaultHotels);
+  const [selectedHotel, setSelectedHotel] = useState<MobileHotel | null>(isConnected ? null : defaultHotels[0]);
+  const [products, setProducts] = useState<MobileProduct[]>(isConnected ? [] : defaultProducts);
+  const [cart, setCart] = useState<CartItem[]>(isConnected ? [] : defaultInitialCart);
+  const [orders, setOrders] = useState<MobileOrder[]>(isConnected ? [] : defaultOrders);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<MobileOrder | null>(null);
-  const [selectedOrderForReorder, setSelectedOrderForReorder] = useState<MobileOrder | null>(defaultOrders[0]);
-  const [notifications, setNotifications] = useState<MobileNotification[]>(defaultNotifications);
+  const [selectedOrderForReorder, setSelectedOrderForReorder] = useState<MobileOrder | null>(isConnected ? null : defaultOrders[0]);
+  const [notifications, setNotifications] = useState<MobileNotification[]>(isConnected ? [] : defaultNotifications);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Subscriptions to live database
   useEffect(() => {
-    const unsubHotels = subscribeToCollection<MobileHotel>('hotels', defaultHotels, (h) => {
+    const unsubHotels = subscribeToCollection<MobileHotel>('hotels', isConnected ? [] : defaultHotels, (h) => {
       setHotels(h);
-      if (!selectedHotel && h.length > 0) setSelectedHotel(h[0]);
+      if (h.length > 0) {
+        setSelectedHotel(prev => prev ? (h.find(item => item.id === prev.id) || h[0]) : h[0]);
+      } else {
+        setSelectedHotel(null);
+      }
     });
-    const unsubProducts = subscribeToCollection<any>('products', defaultProducts, (rawProducts) => {
+    const unsubProducts = subscribeToCollection<any>('products', isConnected ? [] : defaultProducts, (rawProducts) => {
       if (rawProducts && rawProducts.length > 0) {
         const mapped: MobileProduct[] = rawProducts.map((p: any) => {
           let img = p.image;
@@ -263,29 +269,15 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
           };
         });
 
-        // Ensure the 5 featured items with their images are always at top
-        const hasMethi = mapped.some(p => p.name.toLowerCase().includes('fenugreek') || p.name.toLowerCase().includes('methi'));
-        const hasPumpkin = mapped.some(p => p.name.toLowerCase().includes('pumpkin') || p.name.toLowerCase().includes('kaddu'));
-        const hasBrinjal = mapped.some(p => p.name.toLowerCase().includes('brinjal') || p.name.toLowerCase().includes('eggplant') || p.name.toLowerCase().includes('baingan'));
-        const hasMint = mapped.some(p => p.name.toLowerCase().includes('mint') || p.name.toLowerCase().includes('pudina'));
-        const hasGinger = mapped.some(p => p.name.toLowerCase().includes('ginger') || p.name.toLowerCase().includes('adrak'));
-
-        const additions: MobileProduct[] = [];
-        if (!hasMethi) additions.push(defaultProducts[0]);
-        if (!hasPumpkin) additions.push(defaultProducts[1]);
-        if (!hasBrinjal) additions.push(defaultProducts[2]);
-        if (!hasMint) additions.push(defaultProducts[3]);
-        if (!hasGinger) additions.push(defaultProducts[4]);
-
-        setProducts([...additions, ...mapped]);
+        setProducts(mapped);
       } else {
-        setProducts(defaultProducts);
+        setProducts(isConnected ? [] : defaultProducts);
       }
     });
-    const unsubOrders = subscribeToCollection<MobileOrder>('orders', defaultOrders, (o) => {
+    const unsubOrders = subscribeToCollection<MobileOrder>('orders', isConnected ? [] : defaultOrders, (o) => {
       setOrders(o);
     });
-    const unsubNotifs = subscribeToCollection<MobileNotification>('notifications', defaultNotifications, setNotifications);
+    const unsubNotifs = subscribeToCollection<MobileNotification>('notifications', isConnected ? [] : defaultNotifications, setNotifications);
 
     return () => {
       unsubHotels();
@@ -293,7 +285,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       unsubOrders();
       unsubNotifs();
     };
-  }, []);
+  }, [isConnected]);
 
   const playNotificationSound = (type: 'notification' | 'commission' | 'pop' = 'notification') => {
     if (!soundEnabled) return;

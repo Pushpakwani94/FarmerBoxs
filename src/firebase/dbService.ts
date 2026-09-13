@@ -56,16 +56,37 @@ const saveLocalCollection = <T>(name: CollectionName, data: T[]): void => {
   }
 };
 
+// Helper to clear any local mock caches
+export const clearLocalDummyCache = (): void => {
+  if (typeof window === 'undefined') return;
+  const collections: CollectionName[] = [
+    'orders',
+    'zones',
+    'joiners',
+    'hotels',
+    'drivers',
+    'products',
+    'payments',
+    'notifications'
+  ];
+  collections.forEach((c) => {
+    localStorage.removeItem(`farmerbox_${c}`);
+  });
+};
+
 /**
- * Real-time collection subscription with Firebase Firestore and LocalStorage fallback.
+ * Real-time collection subscription with Firebase Firestore.
+ * When Firebase is connected, mock/dummy data is NOT loaded.
  */
 export const subscribeToCollection = <T extends { id?: string | number }>(
   collectionName: CollectionName,
   fallbackData: T[],
   onUpdate: (data: T[]) => void
 ): Unsubscribe => {
-  if (!isFirebaseConfigured() || !db) {
-    // Provide initial local data
+  const isFb = isFirebaseConfigured() && db;
+
+  if (!isFb) {
+    // Provide initial local mock data ONLY when Firebase is NOT configured
     const localData = getLocalCollection(collectionName, fallbackData);
     onUpdate(localData);
 
@@ -83,15 +104,20 @@ export const subscribeToCollection = <T extends { id?: string | number }>(
     return () => window.removeEventListener('storage', handleStorage);
   }
 
+  // Firebase IS connected:
+  // Return cached Firestore items if available, or [] (NO dummy data)
+  const cached = getLocalCollection<T>(collectionName, []);
+  onUpdate(cached);
+
   try {
-    const colRef = collection(db, collectionName);
+    const colRef = collection(db!, collectionName);
     const unsubscribe = onSnapshot(
       colRef,
       (snapshot) => {
         if (snapshot.empty) {
-          // Fallback to local or initial if Firestore collection is completely empty
-          const localData = getLocalCollection(collectionName, fallbackData);
-          onUpdate(localData);
+          // Empty in Firestore -> return empty array (do NOT load dummy data)
+          saveLocalCollection(collectionName, []);
+          onUpdate([]);
           return;
         }
 
@@ -115,14 +141,16 @@ export const subscribeToCollection = <T extends { id?: string | number }>(
       },
       (error) => {
         console.warn(`Firestore subscription error on ${collectionName}:`, error);
-        onUpdate(getLocalCollection(collectionName, fallbackData));
+        // Do not inject dummy data when Firebase is connected
+        const cachedOnError = getLocalCollection<T>(collectionName, []);
+        onUpdate(cachedOnError);
       }
     );
 
     return unsubscribe;
   } catch (err) {
     console.error(`Failed to subscribe to ${collectionName}:`, err);
-    onUpdate(getLocalCollection(collectionName, fallbackData));
+    onUpdate([]);
     return () => {};
   }
 };

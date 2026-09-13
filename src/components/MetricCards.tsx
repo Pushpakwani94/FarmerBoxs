@@ -12,13 +12,21 @@ import {
 import { useApp } from '../context/AppContext';
 
 export const MetricCards: React.FC = () => {
-  const { setActiveTab } = useApp();
+  const { setActiveTab, hotels, joiners, zones, orders, isDatabaseConnected } = useApp();
+
+  const activeHotels = hotels.filter(h => h.status === 'Active').length;
+  const activeJoiners = joiners.filter(j => j.status === 'Active').length;
+  const activeZones = zones.filter(z => z.status === 'Active').length;
+  const pendingOrders = orders.filter(o => o.status === 'Pending').length;
+  const deliveredOrders = orders.filter(o => o.status === 'Delivered').length;
+  const totalSales = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+  const totalCommission = deliveredOrders * 100;
 
   const cards = [
     {
       title: 'Total Hotels',
-      value: '1,620',
-      subtext: '↑ 1,450 Active',
+      value: isDatabaseConnected ? hotels.length.toLocaleString('en-IN') : '1,620',
+      subtext: isDatabaseConnected ? `${activeHotels} Active` : '↑ 1,450 Active',
       bgColor: 'bg-[#edfcf2]',
       iconBg: 'bg-[#bbf7d0] text-[#15803d]',
       icon: Building2,
@@ -27,8 +35,8 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: 'Hotel Joiners',
-      value: '85',
-      subtext: '↑ 72 Active',
+      value: isDatabaseConnected ? joiners.length.toLocaleString('en-IN') : '85',
+      subtext: isDatabaseConnected ? `${activeJoiners} Active` : '↑ 72 Active',
       bgColor: 'bg-[#eff6ff]',
       iconBg: 'bg-[#bfdbfe] text-[#1d4ed8]',
       icon: Users,
@@ -37,8 +45,8 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: 'Total Zones',
-      value: '12',
-      subtext: '↑ 12 Active',
+      value: isDatabaseConnected ? zones.length.toLocaleString('en-IN') : '12',
+      subtext: isDatabaseConnected ? `${activeZones} Active` : '↑ 12 Active',
       bgColor: 'bg-[#fff7ed]',
       iconBg: 'bg-[#fed7aa] text-[#ea580c]',
       icon: MapPin,
@@ -47,8 +55,8 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: "Today's Orders",
-      value: '248',
-      subtext: '↑ +18% from yesterday',
+      value: isDatabaseConnected ? orders.length.toLocaleString('en-IN') : '248',
+      subtext: isDatabaseConnected ? `${orders.length} in database` : '↑ +18% from yesterday',
       bgColor: 'bg-[#f5f3ff]',
       iconBg: 'bg-[#ddd6fe] text-[#7c3aed]',
       icon: ShoppingCart,
@@ -57,7 +65,7 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: 'Pending Orders',
-      value: '48',
+      value: isDatabaseConnected ? pendingOrders.toLocaleString('en-IN') : '48',
       subtext: 'Awaiting Processing',
       bgColor: 'bg-[#fefce8]',
       iconBg: 'bg-[#fef08a] text-[#ca8a04]',
@@ -67,8 +75,8 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: 'Delivered Orders',
-      value: '200',
-      subtext: '↑ +22% from yesterday',
+      value: isDatabaseConnected ? deliveredOrders.toLocaleString('en-IN') : '200',
+      subtext: isDatabaseConnected ? `${deliveredOrders} Completed` : '↑ +22% from yesterday',
       bgColor: 'bg-[#ecfdf5]',
       iconBg: 'bg-[#a7f3d0] text-[#15803d]',
       icon: Truck,
@@ -77,8 +85,8 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: "Today's Sales",
-      value: '₹4,85,000',
-      subtext: '↑ +18% from yesterday',
+      value: isDatabaseConnected ? `₹${totalSales.toLocaleString('en-IN')}` : '₹4,85,000',
+      subtext: isDatabaseConnected ? 'Live Firestore revenue' : '↑ +18% from yesterday',
       bgColor: 'bg-[#fff1f2]',
       iconBg: 'bg-[#fecdd3] text-[#e11d48]',
       icon: IndianRupee,
@@ -87,8 +95,8 @@ export const MetricCards: React.FC = () => {
     },
     {
       title: 'Joiner Commission',
-      value: '₹20,000',
-      subtext: '200 orders × ₹100',
+      value: isDatabaseConnected ? `₹${totalCommission.toLocaleString('en-IN')}` : '₹20,000',
+      subtext: `${deliveredOrders} orders × ₹100`,
       bgColor: 'bg-[#f0f9ff]',
       iconBg: 'bg-[#bae6fd] text-[#0284c7]',
       icon: Coins,

@@ -49,7 +49,14 @@ export const TodaysOrdersTable: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {orders.slice(0, 6).map(order => (
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">
+                  No orders yet in database. New orders will appear here in real-time.
+                </td>
+              </tr>
+            ) : (
+              orders.slice(0, 6).map(order => (
               <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
                 <td className="py-2 px-2 font-medium text-slate-700">{order.id}</td>
                 <td className="py-2 px-2 font-bold text-slate-800">{order.hotelName}</td>
@@ -73,7 +80,7 @@ export const TodaysOrdersTable: React.FC = () => {
                   </button>
                 </td>
               </tr>
-            ))}
+            )))}
           </tbody>
         </table>
       </div>
