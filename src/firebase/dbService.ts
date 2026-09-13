@@ -98,9 +98,14 @@ export const subscribeToCollection = <T extends { id?: string | number }>(
         const items: T[] = [];
         snapshot.forEach((docSnap) => {
           const docData = docSnap.data() as DocumentData;
+          let idVal: string | number = docData.id !== undefined ? docData.id : docSnap.id;
+          if (typeof idVal === 'string' && /^\d+$/.test(idVal) && collectionName !== 'orders' && collectionName !== 'payments') {
+            const num = Number(idVal);
+            if (!isNaN(num)) idVal = num;
+          }
           items.push({
-            id: docSnap.id,
-            ...docData
+            ...docData,
+            id: idVal
           } as unknown as T);
         });
 
@@ -130,12 +135,13 @@ export const saveRecord = async <T extends { id?: string | number }>(
   record: T,
   customId?: string
 ): Promise<string> => {
-  const docId = customId || (record.id ? String(record.id) : `doc_${Date.now()}`);
+  const docId = customId || (record.id !== undefined && record.id !== null ? String(record.id) : `doc_${Date.now()}`);
+  const recordToSave = { ...record, id: record.id !== undefined ? record.id : docId };
 
   if (isFirebaseConfigured() && db) {
     try {
       const docRef = doc(db, collectionName, docId);
-      await setDoc(docRef, { ...record, id: docId }, { merge: true });
+      await setDoc(docRef, recordToSave, { merge: true });
       return docId;
     } catch (e) {
       console.error(`Failed to write ${collectionName} to Firebase:`, e);
@@ -145,12 +151,11 @@ export const saveRecord = async <T extends { id?: string | number }>(
   // Local storage fallback
   const items = getLocalCollection<T>(collectionName, []);
   const existingIdx = items.findIndex((i) => String(i.id) === docId);
-  const updatedRecord = { ...record, id: docId };
 
   if (existingIdx >= 0) {
-    items[existingIdx] = updatedRecord;
+    items[existingIdx] = recordToSave;
   } else {
-    items.unshift(updatedRecord);
+    items.unshift(recordToSave);
   }
   saveLocalCollection(collectionName, items);
   return docId;
