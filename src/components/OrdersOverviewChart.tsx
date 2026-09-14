@@ -1,21 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useApp } from '../context/AppContext';
 import { weeklyOrdersChartData } from '../mockData';
 
 export const OrdersOverviewChart: React.FC = () => {
+  const { orders, isDatabaseConnected } = useApp();
   const [period, setPeriod] = useState<'This Week' | 'Last Week'>('This Week');
 
-  const lastWeekData = [
-    { day: 'Mon', Delivered: 210, Pending: 140, Cancelled: 30 },
-    { day: 'Tue', Delivered: 195, Pending: 110, Cancelled: 20 },
-    { day: 'Wed', Delivered: 230, Pending: 155, Cancelled: 45 },
-    { day: 'Thu', Delivered: 180, Pending: 90, Cancelled: 15 },
-    { day: 'Fri', Delivered: 240, Pending: 130, Cancelled: 35 },
-    { day: 'Sat', Delivered: 190, Pending: 100, Cancelled: 25 },
-    { day: 'Sun', Delivered: 215, Pending: 120, Cancelled: 20 }
-  ];
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  const currentData = period === 'This Week' ? weeklyOrdersChartData : lastWeekData;
+  const currentData = useMemo(() => {
+    if (!isDatabaseConnected) {
+      return period === 'This Week' ? weeklyOrdersChartData : [
+        { day: 'Mon', Delivered: 210, Pending: 140, Cancelled: 30 },
+        { day: 'Tue', Delivered: 195, Pending: 110, Cancelled: 20 },
+        { day: 'Wed', Delivered: 230, Pending: 155, Cancelled: 45 },
+        { day: 'Thu', Delivered: 180, Pending: 90, Cancelled: 15 },
+        { day: 'Fri', Delivered: 240, Pending: 130, Cancelled: 35 },
+        { day: 'Sat', Delivered: 190, Pending: 100, Cancelled: 25 },
+        { day: 'Sun', Delivered: 215, Pending: 120, Cancelled: 20 }
+      ];
+    }
+
+    return days.map(day => {
+      const dayOrders = orders.filter(o => {
+        if (!o.date) return false;
+        try {
+          const d = new Date(o.date);
+          if (!isNaN(d.getTime())) {
+            const orderDay = d.toLocaleDateString('en-US', { weekday: 'short' });
+            return orderDay.toLowerCase() === day.toLowerCase();
+          }
+        } catch {
+          // ignore
+        }
+        return o.date.toLowerCase().includes(day.toLowerCase());
+      });
+
+      return {
+        day,
+        Delivered: dayOrders.filter(o => o.status === 'Delivered').length,
+        Pending: dayOrders.filter(o => o.status === 'Pending').length,
+        Cancelled: dayOrders.filter(o => o.status === 'Cancelled').length
+      };
+    });
+  }, [orders, isDatabaseConnected, period]);
+
+  const maxVal = Math.max(10, ...currentData.map(d => Math.max(d.Delivered, d.Pending, d.Cancelled)));
 
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between h-full">
@@ -51,7 +82,7 @@ export const OrdersOverviewChart: React.FC = () => {
           <BarChart data={currentData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barGap={3}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} domain={[0, 400]} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} domain={[0, maxVal + 5]} />
             <Tooltip
               contentStyle={{ backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11px' }}
             />

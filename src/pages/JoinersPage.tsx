@@ -7,7 +7,7 @@ import { JoinerHotelsModal } from '../components/Modals/JoinerHotelsModal';
 import { getHotelsForJoiner } from '../data/joinerHotelsData';
 
 export const JoinersPage: React.FC = () => {
-  const { joiners, selectedJoiner, setSelectedJoiner, setIsAddJoinerOpen, updateJoiner, deleteJoiner, zones, setActiveTab, setSelectedHotel, hotels } = useApp();
+  const { joiners, selectedJoiner, setSelectedJoiner, setIsAddJoinerOpen, updateJoiner, deleteJoiner, zones, setActiveTab, setSelectedHotel, hotels, orders, isDatabaseConnected } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedZoneFilter, setSelectedZoneFilter] = useState('All Zones');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All Status');
@@ -101,7 +101,9 @@ export const JoinersPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Hotels (Through Joiners)</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">555</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">
+              {isDatabaseConnected ? hotels.length : 555}
+            </h3>
           </div>
         </div>
 
@@ -111,7 +113,9 @@ export const JoinersPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Orders</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">1,842</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">
+              {isDatabaseConnected ? orders.length : 1842}
+            </h3>
           </div>
         </div>
 

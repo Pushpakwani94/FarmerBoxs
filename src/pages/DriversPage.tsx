@@ -32,7 +32,7 @@ import { AssignOrderModal } from '../components/Modals/AssignOrderModal';
 import { ViewDeliveriesModal } from '../components/Modals/ViewDeliveriesModal';
 
 export const DriversPage: React.FC = () => {
-  const { drivers, zones, deleteDriver, updateDriver } = useApp();
+  const { drivers, zones, orders, deleteDriver, updateDriver, isDatabaseConnected } = useApp();
 
   // Filter & Search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,22 +59,41 @@ export const DriversPage: React.FC = () => {
       !term ||
       d.name.toLowerCase().includes(term) ||
       d.mobile.includes(term) ||
-      d.vehicleNo.toLowerCase().includes(term) ||
-      d.zone.toLowerCase().includes(term);
+      d.vehicleNo.toLowerCase().includes(term);
 
-    const matchesZone = selectedZoneFilter === 'All Zones' || d.zone === selectedZoneFilter;
-    const matchesStatus = selectedStatusFilter === 'All Status' || d.status === selectedStatusFilter;
+    const matchesZone =
+      selectedZoneFilter === 'All Zones' || d.zone.toLowerCase() === selectedZoneFilter.toLowerCase();
+
+    const matchesStatus =
+      selectedStatusFilter === 'All Status' || d.status.toLowerCase() === selectedStatusFilter.toLowerCase();
 
     return matchesSearch && matchesZone && matchesStatus;
   });
 
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredDrivers.length / itemsPerPage) || 1;
-  const paginatedDrivers = filteredDrivers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const totalPages = Math.max(1, Math.ceil(filteredDrivers.length / itemsPerPage));
+  const paginatedDrivers = filteredDrivers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  // Dynamic counts
+  const activeDriversCount = drivers.filter(d => d.status === 'Active').length;
+  const inactiveDriversCount = drivers.filter(d => d.status === 'Inactive').length;
+  const onLeaveCount = drivers.filter(d => d.status === 'On Leave').length;
+  const totalDeliveriesCount = orders.length;
+  const completedDeliveriesCount = orders.filter(o => o.status === 'Delivered').length;
+  const successRate = totalDeliveriesCount > 0 ? Math.round((completedDeliveriesCount / totalDeliveriesCount) * 100) : 100;
+
+  const zoneStatsList = zones.length > 0
+    ? zones.map(z => {
+        const zDrivers = drivers.filter(d => d.zone?.toLowerCase() === z.name?.toLowerCase());
+        return {
+          zone: z.name,
+          total: zDrivers.length,
+          active: zDrivers.filter(d => d.status === 'Active').length,
+          inactive: zDrivers.filter(d => d.status !== 'Active').length
+        };
+      })
+    : (isDatabaseConnected ? [] : zoneWiseDriverStats);
+
+  // Handlers
   const handleOpenView = (driver: Driver) => {
     setActiveDriver(driver);
     setIsViewModalOpen(true);
@@ -92,31 +111,25 @@ export const DriversPage: React.FC = () => {
   };
 
   const handleToggleStatus = (driver: Driver) => {
-    const nextStatus = driver.status === 'Active' ? 'On Leave' : 'Active';
+    const nextStatus: Driver['status'] = driver.status === 'Active' ? 'On Leave' : 'Active';
     updateDriver(driver.id, { status: nextStatus });
     setActiveDriver(prev => (prev && prev.id === driver.id ? { ...prev, status: nextStatus } : prev));
   };
 
-  // Quick stats calculation
-  const totalDriversCount = drivers.length;
-  const activeDriversCount = drivers.filter(d => d.status === 'Active').length;
-  const onLeaveCount = drivers.filter(d => d.status === 'On Leave').length;
-  const inactiveDriversCount = drivers.filter(d => d.status === 'Inactive').length;
-
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-5">
-      {/* Top 5 Metric Cards matching screenshot */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Top 5 Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {/* Card 1: Total Drivers */}
-        <div className="bg-[#F0FDF4] p-4 rounded-xl border border-emerald-100/80 flex items-center gap-3.5 shadow-2xs">
+        <div className="bg-[#ECFDF5] p-4 rounded-xl border border-emerald-100/80 flex items-center gap-3.5 shadow-2xs">
           <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
-            <Users className="w-5 h-5" />
+            <Truck className="w-5 h-5" />
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Drivers</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{totalDriversCount}</h3>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{drivers.length}</h3>
             <p className="text-[10px] text-emerald-700 font-bold mt-1 flex items-center gap-0.5">
-              <span>↑</span> +5 this month
+              <span>↑</span> Active Fleet
             </p>
           </div>
         </div>
@@ -129,7 +142,9 @@ export const DriversPage: React.FC = () => {
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Active Drivers</p>
             <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{activeDriversCount}</h3>
-            <p className="text-[10px] text-blue-700 font-bold mt-1">81% of total</p>
+            <p className="text-[10px] text-blue-700 font-bold mt-1">
+              {drivers.length > 0 ? Math.round((activeDriversCount / drivers.length) * 100) : 0}% of total
+            </p>
           </div>
         </div>
 
@@ -141,7 +156,9 @@ export const DriversPage: React.FC = () => {
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Inactive Drivers</p>
             <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{inactiveDriversCount + onLeaveCount}</h3>
-            <p className="text-[10px] text-amber-700 font-bold mt-1">19% of total</p>
+            <p className="text-[10px] text-amber-700 font-bold mt-1">
+              {drivers.length > 0 ? Math.round(((inactiveDriversCount + onLeaveCount) / drivers.length) * 100) : 0}% of total
+            </p>
           </div>
         </div>
 
@@ -151,10 +168,10 @@ export const DriversPage: React.FC = () => {
             <Truck className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[11px] font-semibold text-slate-500">Today's Deliveries</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">86</h3>
+            <p className="text-[11px] font-semibold text-slate-500">Total Deliveries</p>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{totalDeliveriesCount}</h3>
             <p className="text-[10px] text-purple-700 font-bold mt-1 flex items-center gap-0.5">
-              <span>↑</span> +12% from yesterday
+              <span>{totalDeliveriesCount}</span> orders tracked
             </p>
           </div>
         </div>
@@ -166,8 +183,8 @@ export const DriversPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Completed Deliveries</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">78</h3>
-            <p className="text-[10px] text-emerald-700 font-bold mt-1">90% success rate</p>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{completedDeliveriesCount}</h3>
+            <p className="text-[10px] text-emerald-700 font-bold mt-1">{successRate}% success rate</p>
           </div>
         </div>
       </div>
@@ -482,7 +499,7 @@ export const DriversPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-[10px] text-slate-500 font-medium">Total Drivers</p>
-                  <p className="font-extrabold text-slate-900 text-base leading-none mt-0.5">{totalDriversCount}</p>
+                  <p className="font-extrabold text-slate-900 text-base leading-none mt-0.5">{drivers.length}</p>
                 </div>
               </div>
 
@@ -541,7 +558,7 @@ export const DriversPage: React.FC = () => {
                   className="appearance-none text-[11px] bg-slate-50 border border-slate-200 rounded-lg pl-2 pr-6 py-1 font-semibold text-slate-700 cursor-pointer focus:outline-none"
                 >
                   <option value="All Zones">All Zones</option>
-                  {zoneWiseDriverStats.map(z => (
+                  {zoneStatsList.map(z => (
                     <option key={z.zone} value={z.zone}>{z.zone}</option>
                   ))}
                 </select>
@@ -559,23 +576,31 @@ export const DriversPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {zoneWiseDriverStats
-                  .filter(z => zoneTableFilter === 'All Zones' || z.zone === zoneTableFilter)
-                  .map((z, idx) => (
-                    <tr
-                      key={idx}
-                      onClick={() => {
-                        setSelectedZoneFilter(z.zone);
-                        setCurrentPage(1);
-                      }}
-                      className="hover:bg-slate-50 transition-colors cursor-pointer"
-                    >
-                      <td className="py-2 px-2.5 font-bold text-slate-800 hover:text-emerald-700">{z.zone}</td>
-                      <td className="py-2 px-2.5 text-center font-bold text-slate-700">{z.total}</td>
-                      <td className="py-2 px-2.5 text-center font-bold text-emerald-700">{z.active}</td>
-                      <td className="py-2 px-2.5 text-center font-bold text-rose-600">{z.inactive}</td>
-                    </tr>
-                  ))}
+                {zoneStatsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-slate-400 text-xs">
+                      No zone driver stats available.
+                    </td>
+                  </tr>
+                ) : (
+                  zoneStatsList
+                    .filter(z => zoneTableFilter === 'All Zones' || z.zone === zoneTableFilter)
+                    .map((z, idx) => (
+                      <tr
+                        key={idx}
+                        onClick={() => {
+                          setSelectedZoneFilter(z.zone);
+                          setCurrentPage(1);
+                        }}
+                        className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <td className="py-2 px-2.5 font-bold text-slate-800 hover:text-emerald-700">{z.zone}</td>
+                        <td className="py-2 px-2.5 text-center font-bold text-slate-700">{z.total}</td>
+                        <td className="py-2 px-2.5 text-center font-bold text-emerald-700">{z.active}</td>
+                        <td className="py-2 px-2.5 text-center font-bold text-rose-600">{z.inactive}</td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           </div>

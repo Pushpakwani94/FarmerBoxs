@@ -138,11 +138,12 @@ export const InventoryPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Metrics count matching screenshot
+  // Metrics count computed dynamically
   const totalCount = products.length;
-  const inStockCount = 96;
-  const lowStockCount = 18;
-  const outOfStockCount = 8;
+  const inStockCount = products.filter(p => (Number(p.stock) || 0) > (Number(p.minimumStock) || 20)).length;
+  const lowStockCount = products.filter(p => (Number(p.stock) || 0) > 0 && (Number(p.stock) || 0) <= (Number(p.minimumStock) || 20)).length;
+  const outOfStockCount = products.filter(p => (Number(p.stock) || 0) <= 0).length;
+  const categoriesCount = new Set(products.map(p => p.category)).size;
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-5">
@@ -156,7 +157,7 @@ export const InventoryPage: React.FC = () => {
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Products</p>
             <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{totalCount}</h3>
-            <p className="text-[10px] text-emerald-700 font-bold mt-1">Active products</p>
+            <p className="text-[10px] text-emerald-700 font-bold mt-1">Catalog items</p>
           </div>
         </div>
 
@@ -203,7 +204,7 @@ export const InventoryPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Categories</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">12</h3>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{categoriesCount}</h3>
             <p className="text-[10px] text-purple-700 font-bold mt-1">Product categories</p>
           </div>
         </div>

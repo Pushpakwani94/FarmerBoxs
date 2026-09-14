@@ -4,7 +4,7 @@ import { MapPin, Building2, Users, ShoppingBag, BarChart3, Plus, Search, Edit, T
 import type { Zone } from '../types';
 
 export const ZonesPage: React.FC = () => {
-  const { zones, selectedZone, setSelectedZone, setIsAddZoneOpen, updateZone, deleteZone, setActiveTab, setSelectedJoiner, joiners } = useApp();
+  const { zones, selectedZone, setSelectedZone, setIsAddZoneOpen, updateZone, deleteZone, setActiveTab, setSelectedJoiner, joiners, hotels, orders, isDatabaseConnected } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [cityFilter, setCityFilter] = useState('Pune');
@@ -18,6 +18,22 @@ export const ZonesPage: React.FC = () => {
   });
 
   const activeZone = selectedZone || filteredZones[0] || zones[0];
+
+  const totalSalesAmount = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+  const getZoneStats = (zone: Zone) => {
+    const zHotels = hotels.filter(h => h.zone?.toLowerCase() === zone.name?.toLowerCase() || zone.areaLocations?.toLowerCase().includes(h.zone?.toLowerCase()));
+    const zJoiners = joiners.filter(j => j.zone?.toLowerCase() === zone.name?.toLowerCase() || zone.areaLocations?.toLowerCase().includes(j.zone?.toLowerCase()));
+    const zOrders = orders.filter(o => o.zone?.toLowerCase() === zone.name?.toLowerCase() || zone.areaLocations?.toLowerCase().includes(o.zone?.toLowerCase()));
+    const zSales = zOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+    return {
+      hotelsCount: isDatabaseConnected ? zHotels.length : (zHotels.length || zone.hotelsCount || 0),
+      joinersCount: isDatabaseConnected ? zJoiners.length : (zJoiners.length || zone.joinersCount || 0),
+      ordersCount: isDatabaseConnected ? zOrders.length : (zOrders.length || zone.ordersThisMonth || 0),
+      salesCount: isDatabaseConnected ? zSales : (zSales || zone.salesThisMonth || 0)
+    };
+  };
 
   const handleMapZoneClick = (zoneName: string) => {
     const found = zones.find(z => z.name.toLowerCase().includes(zoneName.toLowerCase()) || zoneName.toLowerCase().includes(z.name.toLowerCase()));
@@ -53,6 +69,22 @@ export const ZonesPage: React.FC = () => {
     setActiveTab('Hotel Joiners');
   };
 
+  const activeZoneJoiners = activeZone
+    ? joiners.filter(j =>
+        j.zone?.toLowerCase() === activeZone.name?.toLowerCase() ||
+        activeZone.areaLocations?.toLowerCase().includes(j.zone?.toLowerCase())
+      )
+    : [];
+
+  const displayJoiners = activeZoneJoiners.length > 0
+    ? activeZoneJoiners.map(j => ({
+        name: j.name,
+        hotelsCount: hotels.filter(h => h.joiner?.toLowerCase() === j.name.toLowerCase()).length || j.totalHotels || 0,
+        phone: j.mobile,
+        status: j.status
+      }))
+    : (isDatabaseConnected ? [] : (activeZone?.assignedJoinersList || []));
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-5">
       {/* Top Header Metrics (5 Cards + Action Button) */}
@@ -73,7 +105,7 @@ export const ZonesPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Hotels</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">555</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">{hotels.length}</h3>
           </div>
         </div>
 
@@ -83,7 +115,7 @@ export const ZonesPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Joiners</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">26</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">{joiners.length}</h3>
           </div>
         </div>
 
@@ -93,7 +125,7 @@ export const ZonesPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Orders (This Month)</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">1,842</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">{orders.length}</h3>
           </div>
         </div>
 
@@ -103,7 +135,7 @@ export const ZonesPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Sales (This Month)</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹3,90,000</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{totalSalesAmount.toLocaleString('en-IN')}</h3>
           </div>
         </div>
 
@@ -179,51 +211,62 @@ export const ZonesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredZones.map(zone => (
-                  <tr
-                    key={zone.id}
-                    onClick={() => setSelectedZone(zone)}
-                    className={`cursor-pointer transition-colors ${
-                      activeZone?.id === zone.id ? 'bg-emerald-50/80 font-semibold' : 'hover:bg-slate-50/60'
-                    }`}
-                  >
-                    <td className="py-2.5 px-2 font-medium text-slate-500">{zone.id}</td>
-                    <td className="py-2.5 px-2 font-bold text-slate-800 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
-                      {zone.name}
-                    </td>
-                    <td className="py-2.5 px-2 text-slate-500">{zone.areaLocations}</td>
-                    <td className="py-2.5 px-2 text-center font-semibold text-slate-700">{zone.joinersCount}</td>
-                    <td className="py-2.5 px-2 text-center font-semibold text-slate-700">{zone.hotelsCount}</td>
-                    <td className="py-2.5 px-2 text-center font-bold text-slate-800">{zone.ordersThisMonth}</td>
-                    <td className="py-2.5 px-2 text-right font-bold text-slate-900">₹{zone.salesThisMonth.toLocaleString('en-IN')}</td>
-                    <td className="py-2.5 px-2 text-center">
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        zone.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {zone.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={e => handleEditClick(e, zone)}
-                          className="p-1 text-slate-500 hover:text-emerald-700 rounded hover:bg-slate-100 cursor-pointer"
-                          title="Edit Zone"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={e => handleDelete(e, zone.id, zone.name)}
-                          className="p-1 text-slate-500 hover:text-rose-600 rounded hover:bg-slate-100 cursor-pointer"
-                          title="Delete Zone"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                {filteredZones.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center text-slate-400 text-xs">
+                      No zones found. Click "Add New Zone" to add one.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredZones.map(zone => {
+                    const stats = getZoneStats(zone);
+                    return (
+                      <tr
+                        key={zone.id}
+                        onClick={() => setSelectedZone(zone)}
+                        className={`cursor-pointer transition-colors ${
+                          activeZone?.id === zone.id ? 'bg-emerald-50/80 font-semibold' : 'hover:bg-slate-50/60'
+                        }`}
+                      >
+                        <td className="py-2.5 px-2 font-medium text-slate-500">{zone.id}</td>
+                        <td className="py-2.5 px-2 font-bold text-slate-800 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
+                          {zone.name}
+                        </td>
+                        <td className="py-2.5 px-2 text-slate-500">{zone.areaLocations}</td>
+                        <td className="py-2.5 px-2 text-center font-semibold text-slate-700">{stats.joinersCount}</td>
+                        <td className="py-2.5 px-2 text-center font-semibold text-slate-700">{stats.hotelsCount}</td>
+                        <td className="py-2.5 px-2 text-center font-bold text-slate-800">{stats.ordersCount}</td>
+                        <td className="py-2.5 px-2 text-right font-bold text-slate-900">₹{stats.salesCount.toLocaleString('en-IN')}</td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            zone.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {zone.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={e => handleEditClick(e, zone)}
+                              className="p-1 text-slate-500 hover:text-emerald-700 rounded hover:bg-slate-100 cursor-pointer"
+                              title="Edit Zone"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={e => handleDelete(e, zone.id, zone.name)}
+                              className="p-1 text-slate-500 hover:text-rose-600 rounded hover:bg-slate-100 cursor-pointer"
+                              title="Delete Zone"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -338,29 +381,34 @@ export const ZonesPage: React.FC = () => {
               </div>
 
               {/* Zone Stats Grid */}
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                <div className="bg-sky-50 p-2.5 rounded-lg border border-sky-100">
-                  <p className="text-[10px] text-slate-400 font-medium">Total Hotels</p>
-                  <p className="font-bold text-sky-900 text-base">{activeZone.hotelsCount}</p>
-                </div>
-                <div className="bg-orange-50 p-2.5 rounded-lg border border-orange-100">
-                  <p className="text-[10px] text-slate-400 font-medium">Total Joiners</p>
-                  <p className="font-bold text-orange-900 text-base">{activeZone.joinersCount}</p>
-                </div>
-                <div className="bg-purple-50 p-2.5 rounded-lg border border-purple-100">
-                  <p className="text-[10px] text-slate-400 font-medium">Total Orders</p>
-                  <p className="font-bold text-purple-900 text-base">{activeZone.ordersThisMonth}</p>
-                </div>
-                <div className="bg-rose-50 p-2.5 rounded-lg border border-rose-100">
-                  <p className="text-[10px] text-slate-400 font-medium">Total Sales</p>
-                  <p className="font-bold text-rose-900 text-base">₹{activeZone.salesThisMonth.toLocaleString('en-IN')}</p>
-                </div>
-              </div>
+              {(() => {
+                const activeStats = getZoneStats(activeZone);
+                return (
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                    <div className="bg-sky-50 p-2.5 rounded-lg border border-sky-100">
+                      <p className="text-[10px] text-slate-400 font-medium">Total Hotels</p>
+                      <p className="font-bold text-sky-900 text-base">{activeStats.hotelsCount}</p>
+                    </div>
+                    <div className="bg-orange-50 p-2.5 rounded-lg border border-orange-100">
+                      <p className="text-[10px] text-slate-400 font-medium">Total Joiners</p>
+                      <p className="font-bold text-orange-900 text-base">{activeStats.joinersCount}</p>
+                    </div>
+                    <div className="bg-purple-50 p-2.5 rounded-lg border border-purple-100">
+                      <p className="text-[10px] text-slate-400 font-medium">Total Orders</p>
+                      <p className="font-bold text-purple-900 text-base">{activeStats.ordersCount}</p>
+                    </div>
+                    <div className="bg-rose-50 p-2.5 rounded-lg border border-rose-100">
+                      <p className="text-[10px] text-slate-400 font-medium">Total Sales</p>
+                      <p className="font-bold text-rose-900 text-base">₹{activeStats.salesCount.toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Assigned Joiners List */}
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-slate-800">Assigned Joiners</h4>
+                  <h4 className="font-bold text-xs text-slate-800">Assigned Joiners ({displayJoiners.length})</h4>
                   <button
                     onClick={() => setActiveTab('Hotel Joiners')}
                     className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer"
@@ -370,32 +418,34 @@ export const ZonesPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5 text-xs">
-                  {(activeZone.assignedJoinersList || [
-                    { name: 'Rahul Patil', hotelsCount: 45, phone: '9876543210', status: 'Active' },
-                    { name: 'Sneha More', hotelsCount: 38, phone: '8765432109', status: 'Active' },
-                    { name: 'Amit Shinde', hotelsCount: 22, phone: '9988776655', status: 'Active' }
-                  ]).map((j, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => handleJoinerClick(j.name)}
-                      className="flex items-center justify-between p-2 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-100 cursor-pointer transition-colors"
-                      title={`Click to view ${j.name}'s profile`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-500">{idx + 1}</span>
-                        <span className="font-bold text-slate-800">{j.name}</span>
-                        <span className="text-slate-400 text-[11px]">({j.hotelsCount} Hotels)</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-600 flex items-center gap-1 text-[11px]">
-                          <Phone className="w-3 h-3 text-slate-400" /> {j.phone}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                          {j.status}
-                        </span>
-                      </div>
+                  {displayJoiners.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 rounded-lg border border-slate-100 text-slate-400 text-xs">
+                      No joiners assigned to this zone yet.
                     </div>
-                  ))}
+                  ) : (
+                    displayJoiners.map((j, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleJoinerClick(j.name)}
+                        className="flex items-center justify-between p-2 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-100 cursor-pointer transition-colors"
+                        title={`Click to view ${j.name}'s profile`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-500">{idx + 1}</span>
+                          <span className="font-bold text-slate-800">{j.name}</span>
+                          <span className="text-slate-400 text-[11px]">({j.hotelsCount} Hotels)</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-600 flex items-center gap-1 text-[11px]">
+                            <Phone className="w-3 h-3 text-slate-400" /> {j.phone}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                            {j.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

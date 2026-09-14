@@ -39,6 +39,10 @@ export interface AdminProfile {
   location: string;
   department: string;
   joinedDate: string;
+  bio?: string;
+  emergencyContact?: string;
+  timezone?: string;
+  language?: string;
 }
 
 interface AppContextType {
@@ -91,6 +95,8 @@ interface AppContextType {
   adminProfile: AdminProfile;
   updateAdminProfile: (data: Partial<AdminProfile>) => void;
   markNotificationsAsRead: () => void;
+  markNotificationAsRead: (id: number | string) => void;
+  clearAllNotifications: () => void;
 
   // Actions
   updateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
@@ -107,12 +113,19 @@ interface AppContextType {
     zone?: string,
     joiner?: string
   ) => void;
+  updateHotel: (hotelId: number, data: Partial<Hotel>) => void;
+  deleteHotel: (hotelId: number) => void;
   addDriver: (driver: Partial<Driver>) => void;
   updateDriver: (driverId: number, data: Partial<Driver>) => void;
   deleteDriver: (driverId: number) => void;
   addProduct: (product: Partial<Product>) => void;
   updateProduct: (productId: number, data: Partial<Product>) => void;
   deleteProduct: (productId: number) => void;
+  addOrder: (order: Partial<Order>) => void;
+  deleteOrder: (orderId: string) => void;
+  addPayment: (payment: Partial<PaymentTransaction>) => void;
+  addNotification: (notification: Partial<NotificationItem>) => void;
+  deleteNotification: (id: number | string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -129,7 +142,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Subscriptions to Realtime Database (Dummy data removed if Firebase is connected)
+  // Subscriptions to Cloud Firestore (Dummy data removed if Firebase is connected)
   useEffect(() => {
     // If Firebase is active, purge any old mock data from local storage
     if (isConnected) {
@@ -158,7 +171,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setSelectedProduct(prev => prev ? (p.find(item => String(item.id) === String(prev.id)) || p[0] || null) : (p[0] || null));
     });
     const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', isConnected ? [] : initialPayments, setPayments);
-    const unsubNotifs = subscribeToCollection<NotificationItem>('notifications', isConnected ? [] : initialNotifications, setNotifications);
+    const unsubNotifs = subscribeToCollection<any>('notifications', isConnected ? [] : initialNotifications, (rawNotifs) => {
+      const normalized: NotificationItem[] = (rawNotifs || []).map((n: any) => ({
+        id: n.id !== undefined && n.id !== null ? n.id : Date.now(),
+        title: n.title || 'Notification',
+        message: n.message || n.subtitle || 'No details provided',
+        subtitle: n.subtitle || n.message || '',
+        userType: n.userType || n.category || 'All Users',
+        status: n.status || 'Sent',
+        dateTime: n.dateTime || n.time || new Date().toLocaleString(),
+        time: n.time || n.dateTime || 'Just now',
+        read: Boolean(n.read),
+        category: n.category || 'System',
+        iconType: n.iconType || 'system'
+      }));
+      setNotifications(normalized);
+    });
 
     return () => {
       unsubOrders();
@@ -190,24 +218,81 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isOrderDetailModalOpen, setIsOrderDetailModalOpen] = useState(false);
   const [isAdminProfileOpen, setIsAdminProfileOpen] = useState(false);
 
-  const [adminProfile, setAdminProfile] = useState<AdminProfile>({
-    name: 'Pushpak Wani',
-    role: 'Super Admin',
-    email: 'admin@farmerbox.com',
-    phone: '+91 98765 43210',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-    zone: 'All Zones (HQ)',
-    location: 'Pune, Maharashtra',
-    department: 'Operations & Management',
-    joinedDate: 'Jan 2025'
+  const [adminProfile, setAdminProfile] = useState<AdminProfile>(() => {
+    try {
+      const saved = localStorage.getItem('farmerbox_admin_profile');
+      if (saved) {
+        return {
+          name: 'Pushpak Wani',
+          role: 'Super Admin',
+          email: 'admin@farmerbox.com',
+          phone: '+91 98765 43210',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+          zone: 'All Zones (HQ)',
+          location: 'Pune, Maharashtra',
+          department: 'Operations & Management',
+          joinedDate: 'Jan 2025',
+          bio: 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
+          emergencyContact: '+91 98220 11223 (Operations Manager)',
+          timezone: '(GMT+05:30) Asia/Kolkata',
+          language: 'English (India)',
+          ...JSON.parse(saved)
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to parse admin profile', e);
+    }
+    return {
+      name: 'Pushpak Wani',
+      role: 'Super Admin',
+      email: 'admin@farmerbox.com',
+      phone: '+91 98765 43210',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+      zone: 'All Zones (HQ)',
+      location: 'Pune, Maharashtra',
+      department: 'Operations & Management',
+      joinedDate: 'Jan 2025',
+      bio: 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
+      emergencyContact: '+91 98220 11223 (Operations Manager)',
+      timezone: '(GMT+05:30) Asia/Kolkata',
+      language: 'English (India)'
+    };
   });
 
   const updateAdminProfile = (data: Partial<AdminProfile>) => {
-    setAdminProfile(prev => ({ ...prev, ...data }));
+    setAdminProfile(prev => {
+      const updated = { ...prev, ...data };
+      try {
+        localStorage.setItem('farmerbox_admin_profile', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Failed to persist admin profile', e);
+      }
+      return updated;
+    });
   };
 
   const markNotificationsAsRead = () => {
+    notifications.forEach(n => {
+      if (!n.read) {
+        saveRecord('notifications', { ...n, read: true }, String(n.id));
+      }
+    });
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const markNotificationAsRead = (id: number | string) => {
+    const target = notifications.find(n => String(n.id) === String(id));
+    if (target && !target.read) {
+      saveRecord('notifications', { ...target, read: true }, String(target.id));
+    }
+    setNotifications(prev => prev.map(n => (String(n.id) === String(id) ? { ...n, read: true } : n)));
+  };
+
+  const clearAllNotifications = () => {
+    notifications.forEach(n => {
+      deleteRecord('notifications', n.id);
+    });
+    setNotifications([]);
   };
 
   const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
@@ -219,6 +304,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         commission: newStatus === 'Delivered' ? 100 : existing.commission
       };
       saveRecord('orders', updated);
+      addNotification({
+        title: `Order #${orderId} ${newStatus}`,
+        message: `Order status changed to ${newStatus} for ${existing.hotelName}`,
+        subtitle: `${existing.hotelName} • ${newStatus}`,
+        userType: 'Admins',
+        status: 'Sent',
+        category: 'Orders',
+        iconType: 'order',
+        read: false
+      });
     }
     setOrders(prev =>
       prev.map(ord => {
@@ -361,6 +456,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     saveRecord('hotels', newHotel);
     setHotels(prev => [newHotel, ...prev]);
+    addNotification({
+      title: 'New Hotel Registered',
+      message: `${newHotel.name} registered in ${newHotel.zone} Zone`,
+      subtitle: `${newHotel.name} • ${newHotel.zone}`,
+      userType: 'Admins',
+      status: 'Sent',
+      category: 'Hotels',
+      iconType: 'hotel',
+      read: false
+    });
+  };
+
+  const updateHotel = (hotelId: number, data: Partial<Hotel>) => {
+    const existing = hotels.find(h => h.id === hotelId);
+    if (existing) {
+      const updated = { ...existing, ...data };
+      saveRecord('hotels', updated);
+    }
+    setHotels(prev => prev.map(h => (h.id === hotelId ? { ...h, ...data } : h)));
+    if (selectedHotel && selectedHotel.id === hotelId) {
+      setSelectedHotel(prev => (prev ? { ...prev, ...data } : null));
+    }
+  };
+
+  const deleteHotel = (hotelId: number) => {
+    deleteRecord('hotels', hotelId);
+    setHotels(prev => prev.filter(h => h.id !== hotelId));
+    if (selectedHotel && selectedHotel.id === hotelId) {
+      setSelectedHotel(null);
+    }
   };
 
   const addDriver = (driverData: Partial<Driver>) => {
@@ -452,6 +577,95 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const addOrder = (orderData: Partial<Order>) => {
+    const newOrder: Order = {
+      id: orderData.id || `FB${Math.floor(1000 + Math.random() * 9000)}`,
+      date: orderData.date || new Date().toISOString().split('T')[0],
+      time: orderData.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      hotelName: orderData.hotelName || 'New Hotel',
+      hotelImage: orderData.hotelImage || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100',
+      zone: orderData.zone || 'Kharadi',
+      joiner: orderData.joiner || 'Rahul Patil',
+      amount: orderData.amount || 0,
+      paymentMode: orderData.paymentMode || 'Online',
+      paymentStatus: orderData.paymentStatus || 'Pending',
+      driver: orderData.driver || 'Suresh Jadhav',
+      status: orderData.status || 'Pending',
+      commission: orderData.commission || 0,
+      items: orderData.items || [],
+      ...orderData
+    };
+    saveRecord('orders', newOrder);
+    setOrders(prev => [newOrder, ...prev]);
+    addNotification({
+      title: 'New Order Received',
+      message: `${newOrder.hotelName} placed order #${newOrder.id} for ₹${newOrder.amount}`,
+      subtitle: `${newOrder.hotelName} • ₹${newOrder.amount}`,
+      userType: 'Admins',
+      status: 'Sent',
+      category: 'Orders',
+      iconType: 'order',
+      read: false
+    });
+  };
+
+  const deleteOrder = (orderId: string) => {
+    deleteRecord('orders', orderId);
+    setOrders(prev => prev.filter(o => String(o.id) !== String(orderId)));
+    if (selectedOrder && String(selectedOrder.id) === String(orderId)) {
+      setSelectedOrder(null);
+    }
+  };
+
+  const addPayment = (paymentData: Partial<PaymentTransaction>) => {
+    const newPayment: PaymentTransaction = {
+      id: paymentData.id || Date.now(),
+      dateTime: paymentData.dateTime || new Date().toLocaleString(),
+      referenceId: paymentData.referenceId || `TXN${Math.floor(100000 + Math.random() * 900000)}`,
+      type: paymentData.type || 'Order Payment',
+      fromTo: paymentData.fromTo || 'Customer',
+      orderId: paymentData.orderId || `FB${Math.floor(1000 + Math.random() * 9000)}`,
+      amount: paymentData.amount || 0,
+      status: paymentData.status || 'Success',
+      paymentMode: paymentData.paymentMode || 'Online',
+      ...paymentData
+    };
+    saveRecord('payments', newPayment);
+    setPayments(prev => [newPayment, ...prev]);
+  };
+
+  const addNotification = (notifData: Partial<NotificationItem>) => {
+    const docId = notifData.id !== undefined && notifData.id !== null ? String(notifData.id) : String(Date.now());
+    const nowStr = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const newNotif: NotificationItem = {
+      id: notifData.id !== undefined && notifData.id !== null ? notifData.id : Date.now(),
+      title: notifData.title || 'Notification',
+      message: notifData.message || notifData.subtitle || 'System notification',
+      subtitle: notifData.subtitle || notifData.message || '',
+      userType: notifData.userType || notifData.category || 'All Users',
+      status: notifData.status || 'Sent',
+      dateTime: notifData.dateTime || nowStr,
+      time: notifData.time || 'Just now',
+      read: false,
+      category: notifData.category || 'System',
+      iconType: notifData.iconType || 'system',
+      ...notifData
+    };
+    saveRecord('notifications', newNotif, docId);
+    setNotifications(prev => [newNotif, ...prev.filter(n => String(n.id) !== docId)]);
+  };
+
+  const deleteNotification = (id: number | string) => {
+    deleteRecord('notifications', id);
+    setNotifications(prev => prev.filter(n => String(n.id) !== String(id)));
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -498,6 +712,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         adminProfile,
         updateAdminProfile,
         markNotificationsAsRead,
+        markNotificationAsRead,
+        clearAllNotifications,
         updateOrderStatus,
         addZone,
         updateZone,
@@ -506,12 +722,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateJoiner,
         deleteJoiner,
         addHotel,
+        updateHotel,
+        deleteHotel,
         addDriver,
         updateDriver,
         deleteDriver,
         addProduct,
         updateProduct,
-        deleteProduct
+        deleteProduct,
+        addOrder,
+        deleteOrder,
+        addPayment,
+        addNotification,
+        deleteNotification
       }}
     >
       {children}

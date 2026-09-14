@@ -14,7 +14,6 @@ import {
   Settings,
   LogOut,
   Sprout,
-  Smartphone,
   User
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -22,9 +21,10 @@ import { useApp } from '../context/AppContext';
 export const Sidebar: React.FC = () => {
   const { activeTab, setActiveTab, notifications, setIsNotificationsOpen } = useApp();
 
+  const unreadCount = notifications.filter(n => !n.read).length;
+
   const menuItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'Joiner Mobile App', label: 'Joiner App Management', icon: Smartphone, tag: 'APK' },
     { id: 'Zones', label: 'Zones', icon: MapPin },
     { id: 'Hotel Joiners', label: 'Hotel Joiners', icon: Users },
     { id: 'Hotels', label: 'Hotels', icon: Building2 },
@@ -34,7 +34,7 @@ export const Sidebar: React.FC = () => {
     { id: 'Joiner Commission', label: 'Joiner Commission', icon: CircleDollarSign },
     { id: 'Payments', label: 'Payments', icon: CreditCard },
     { id: 'Reports', label: 'Reports', icon: BarChart3 },
-    { id: 'Notifications', label: 'Notifications', icon: Bell, badge: 5 },
+    { id: 'Notifications', label: 'Notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : undefined },
     { id: 'Settings', label: 'Settings', icon: Settings },
     { id: 'Profile', label: 'My Profile', icon: User },
     { id: 'Logout', label: 'Logout', icon: LogOut }
@@ -64,7 +64,7 @@ export const Sidebar: React.FC = () => {
                 key={item.id}
                 onClick={() => {
                   if (item.id === 'Notifications') {
-                    setIsNotificationsOpen(true);
+                    setActiveTab('Notifications');
                   } else if (item.id === 'Logout') {
                     alert('Logged out successfully');
                   } else {

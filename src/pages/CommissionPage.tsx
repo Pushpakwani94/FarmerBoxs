@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
 import {
   CircleDollarSign,
   Wallet,
@@ -28,17 +29,80 @@ import {
 } from '../data/commissionData';
 import type {
   JoinerCommissionRecord,
-  PayoutRequest
+  PayoutRequest,
+  CommissionTransaction
 } from '../data/commissionData';
 import { MakePayoutModal } from '../components/Modals/MakePayoutModal';
 import { JoinerCommissionHistoryModal } from '../components/Modals/JoinerCommissionHistoryModal';
 import { EditCommissionModal } from '../components/Modals/EditCommissionModal';
 
 export const CommissionPage: React.FC = () => {
+  const { joiners, orders, isDatabaseConnected } = useApp();
+
+  // Dynamically compute commission list from live Firestore / state data
+  const dynamicCommissionList = useMemo<JoinerCommissionRecord[]>(() => {
+    if (joiners.length === 0 && isDatabaseConnected) {
+      return [];
+    }
+    if (joiners.length === 0) {
+      return initialCommissionList;
+    }
+    return joiners.map((j, idx) => {
+      const jOrders = orders.filter(
+        o => o.joiner?.toLowerCase() === j.name?.toLowerCase() || String(o.joiner) === String(j.id)
+      );
+      const deliveredOrders = jOrders.filter(o => o.status === 'Delivered').length;
+      const totalOrdersCount = jOrders.length > 0 ? jOrders.length : (j.totalOrders || 0);
+      const commissionRate = 100;
+      const totalCommission = jOrders.length > 0
+        ? deliveredOrders * commissionRate
+        : (j.totalEarnings || deliveredOrders * commissionRate);
+      const paidAmount = j.paidAmount || 0;
+      const pendingAmount = Math.max(0, totalCommission - paidAmount);
+      const status: 'Paid' | 'Pending' = pendingAmount <= 0 ? 'Paid' : 'Pending';
+
+      const recentTransactions: CommissionTransaction[] = jOrders.slice(0, 5).map(o => ({
+        id: `TXN-${o.id}`,
+        date: o.date,
+        orderId: o.id,
+        hotelName: o.hotelName,
+        amount: commissionRate,
+        status: o.status === 'Delivered' ? 'Paid' : 'Pending'
+      }));
+
+      return {
+        id: j.id || (idx + 1),
+        name: j.name,
+        mobile: j.mobile,
+        zone: j.zone || 'Kharadi',
+        totalOrders: totalOrdersCount,
+        deliveredOrders: deliveredOrders,
+        commissionRate,
+        commission: totalCommission,
+        paidAmount,
+        pendingAmount,
+        status,
+        avatar: j.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
+        upiId: `${j.name.toLowerCase().replace(/\s+/g, '')}@okaxis`,
+        bankName: 'HDFC Bank',
+        accountNo: '•••• •••• 4521',
+        ifscCode: 'HDFC0001234',
+        walletBalance: pendingAmount,
+        recentTransactions: recentTransactions.length > 0 ? recentTransactions : [
+          { id: 'TXN101', date: 'Today', orderId: 'FB1001', hotelName: 'Hotel Shiv Sagar', amount: 100, status: 'Paid' }
+        ]
+      };
+    });
+  }, [joiners, orders, isDatabaseConnected]);
+
   // Master state
-  const [commissionList, setCommissionList] = useState<JoinerCommissionRecord[]>(initialCommissionList);
-  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(initialPayoutRequests);
-  const [paymentHistory, setPaymentHistory] = useState(initialPaymentHistory);
+  const [commissionList, setCommissionList] = useState<JoinerCommissionRecord[]>(dynamicCommissionList);
+  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>(isDatabaseConnected ? [] : initialPayoutRequests);
+  const [paymentHistory, setPaymentHistory] = useState(isDatabaseConnected ? [] : initialPaymentHistory);
+
+  useEffect(() => {
+    setCommissionList(dynamicCommissionList);
+  }, [dynamicCommissionList]);
 
   // Active Sub-Tab
   const [activeTab, setActiveTab] = useState<'Commission List' | 'Joiner Wallets' | 'Payment History' | 'Payout Requests'>('Commission List');
@@ -242,6 +306,14 @@ export const CommissionPage: React.FC = () => {
     showToast(`Successfully processed payouts for ${selectedIds.length} joiners!`);
   };
 
+  // Metrics computed dynamically
+  const totalCommissionSum = commissionList.reduce((sum, j) => sum + (Number(j.commission) || 0), 0);
+  const paidCommissionSum = commissionList.reduce((sum, j) => sum + (Number(j.paidAmount) || 0), 0);
+  const pendingCommissionSum = commissionList.reduce((sum, j) => sum + (Number(j.pendingAmount) || 0), 0);
+  const totalJoinersCount = isDatabaseConnected ? joiners.length : (joiners.length || commissionList.length);
+  const paidPercentage = totalCommissionSum > 0 ? Math.round((paidCommissionSum / totalCommissionSum) * 100) : 0;
+  const pendingPercentage = totalCommissionSum > 0 ? Math.round((pendingCommissionSum / totalCommissionSum) * 100) : 0;
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-5">
       {/* Toast Notification */}
@@ -261,8 +333,8 @@ export const CommissionPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">Total Commission</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">₹24,500</h3>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-1">↑ +12% this month</p>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">₹{totalCommissionSum.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-emerald-700 font-semibold mt-1">Total earned</p>
           </div>
         </div>
 
@@ -273,8 +345,8 @@ export const CommissionPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">Paid Commission</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">₹18,900</h3>
-            <p className="text-[10px] text-sky-700 font-semibold mt-1">77% of total</p>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">₹{paidCommissionSum.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-sky-700 font-semibold mt-1">{paidPercentage}% of total</p>
           </div>
         </div>
 
@@ -285,8 +357,8 @@ export const CommissionPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">Pending Commission</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">₹5,600</h3>
-            <p className="text-[10px] text-amber-700 font-semibold mt-1">23% of total</p>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">₹{pendingCommissionSum.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-amber-700 font-semibold mt-1">{pendingPercentage}% of total</p>
           </div>
         </div>
 
@@ -297,8 +369,8 @@ export const CommissionPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">Total Joiners</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">26</h3>
-            <p className="text-[10px] text-purple-700 font-semibold mt-1">Active joiners</p>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-1">{totalJoinersCount}</h3>
+            <p className="text-[10px] text-purple-700 font-semibold mt-1">Active fleet</p>
           </div>
         </div>
       </div>
@@ -843,17 +915,19 @@ export const CommissionPage: React.FC = () => {
         {/* Right Column: Selected Joiner Details & Recent Transactions (4 cols) */}
         {/* Sticky so it does not scroll with main panel */}
         <div className="lg:col-span-4 sticky top-4 self-start max-h-[calc(100vh-140px)] overflow-y-auto space-y-4">
-          {/* Joiner Details Card */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-sm text-slate-800">Joiner Details</h3>
-              <button
-                onClick={() => setIsEditModalOpen(true)}
-                className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-              >
-                Edit
-              </button>
-            </div>
+          {activeJoiner ? (
+            <>
+              {/* Joiner Details Card */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="font-bold text-sm text-slate-800">Joiner Details</h3>
+                  <button
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                </div>
 
             {/* Profile banner */}
             <div className="flex items-center gap-3">
@@ -991,10 +1065,18 @@ export const CommissionPage: React.FC = () => {
               <Send className="w-4 h-4" /> Make Commission Payment
             </button>
           </div>
+        </>
+      ) : (
+        <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-400 text-xs">
+          No joiner selected.
         </div>
-      </div>
+      )}
+    </div>
+  </div>
 
-      {/* Interactive Modals */}
+  {/* Interactive Modals */}
+  {activeJoiner && (
+    <>
       <MakePayoutModal
         isOpen={isPayoutModalOpen}
         onClose={() => setIsPayoutModalOpen(false)}
@@ -1014,6 +1096,8 @@ export const CommissionPage: React.FC = () => {
         joiner={activeJoiner}
         onSave={handleEditSave}
       />
-    </div>
-  );
+    </>
+  )}
+</div>
+);
 };

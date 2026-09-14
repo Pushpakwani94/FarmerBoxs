@@ -28,7 +28,7 @@ import {
 import type { OrderStatus, Order } from '../types';
 
 export const OrdersPage: React.FC = () => {
-  const { orders, selectedOrder, setSelectedOrder, zones, joiners, drivers, hotels, setActiveTab, setSelectedHotel } = useApp();
+  const { orders, selectedOrder, setSelectedOrder, zones, joiners, drivers, hotels, setActiveTab, setSelectedHotel, isDatabaseConnected, addOrder } = useApp();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedZone, setSelectedZone] = useState('All Zones');
@@ -120,7 +120,30 @@ export const OrdersPage: React.FC = () => {
 
   const handleCreateOrderSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Order for ${newHotelName} created successfully with delivery assigned to ${newDriver}!`);
+    const hotelObj = hotels.find(h => h.name.toLowerCase() === newHotelName.toLowerCase()) || hotels[0];
+    const newOrderRecord: Order = {
+      id: `#FB${1000 + orders.length + 1}`,
+      hotelName: newHotelName || (hotelObj ? hotelObj.name : 'Hotel Guest'),
+      hotelImage: hotelObj?.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100',
+      zone: hotelObj?.zone || 'Kharadi',
+      joiner: hotelObj?.joiner || 'Rahul Sharma',
+      amount: 1250,
+      status: 'Pending',
+      date: 'Today',
+      time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      paymentMode: newPaymentMode,
+      paymentStatus: newPaymentMode === 'Online' ? 'Paid' : 'Pending',
+      driver: newDriver || (drivers[0] ? drivers[0].name : 'Assigned Driver'),
+      driverPhone: drivers[0]?.mobile || '9876543210',
+      commission: 0,
+      deliveryAddress: hotelObj?.address || 'Pune, Maharashtra',
+      items: [
+        { id: 1, productName: 'Fresh Tomato', qty: 20, unit: 'KG', price: 30, total: 600 },
+        { id: 2, productName: 'Red Onion', qty: 15, unit: 'KG', price: 35, total: 525 },
+        { id: 3, productName: 'Green Chilli', qty: 2.5, unit: 'KG', price: 50, total: 125 }
+      ]
+    };
+    addOrder(newOrderRecord);
     setIsCreateOrderOpen(false);
   };
 
@@ -135,6 +158,13 @@ export const OrdersPage: React.FC = () => {
   const activeHotelObj = hotels.find(h => h.name.toLowerCase() === activeOrder?.hotelName.toLowerCase());
   const hotelImg = activeOrder?.hotelImage || activeHotelObj?.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100';
 
+  const totalOrdersCount = isDatabaseConnected ? orders.length : 1842;
+  const pendingOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Pending').length : 48;
+  const confirmedOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Confirmed' || o.status === 'Preparing').length : 125;
+  const outForDeliveryOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Out for Delivery').length : 68;
+  const deliveredOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Delivered').length : 1520;
+  const cancelledOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Cancelled').length : 81;
+
   return (
     <div className="p-5 max-w-[1600px] mx-auto space-y-4">
       {/* 6 Top Metric Cards with Exact Color Scheme & Alignment */}
@@ -147,8 +177,10 @@ export const OrdersPage: React.FC = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 truncate">Total Orders</p>
-            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">1,842</h3>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-1">↑ +18% this month</p>
+            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">{totalOrdersCount}</h3>
+            <p className="text-[10px] text-emerald-700 font-semibold mt-1">
+              {isDatabaseConnected ? `${totalOrdersCount} in database` : '↑ +18% this month'}
+            </p>
           </div>
         </div>
 
@@ -159,7 +191,7 @@ export const OrdersPage: React.FC = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 truncate">Pending</p>
-            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">48</h3>
+            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">{pendingOrdersCount}</h3>
             <p className="text-[10px] text-amber-700 font-semibold mt-1">Awaiting dispatch</p>
           </div>
         </div>
@@ -171,7 +203,7 @@ export const OrdersPage: React.FC = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 truncate">Confirmed</p>
-            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">125</h3>
+            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">{confirmedOrdersCount}</h3>
             <p className="text-[10px] text-sky-700 font-semibold mt-1">Ready to pack</p>
           </div>
         </div>
@@ -183,7 +215,7 @@ export const OrdersPage: React.FC = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 truncate">Out for Delivery</p>
-            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">68</h3>
+            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">{outForDeliveryOrdersCount}</h3>
             <p className="text-[10px] text-purple-700 font-semibold mt-1">On the road</p>
           </div>
         </div>
@@ -195,7 +227,7 @@ export const OrdersPage: React.FC = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 truncate">Delivered</p>
-            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">1,520</h3>
+            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">{deliveredOrdersCount}</h3>
             <p className="text-[10px] text-emerald-700 font-semibold mt-1">Successfully fulfilled</p>
           </div>
         </div>
@@ -207,8 +239,8 @@ export const OrdersPage: React.FC = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 truncate">Cancelled</p>
-            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">81</h3>
-            <p className="text-[10px] text-rose-700 font-semibold mt-1">4.3% return rate</p>
+            <h3 className="text-xl font-extrabold text-slate-900 leading-none mt-0.5">{cancelledOrdersCount}</h3>
+            <p className="text-[10px] text-rose-700 font-semibold mt-1">Cancelled orders</p>
           </div>
         </div>
       </div>

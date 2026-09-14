@@ -43,6 +43,18 @@ export const AdminProfileModal: React.FC = () => {
     zone: adminProfile.zone
   });
 
+  React.useEffect(() => {
+    setFormData({
+      name: adminProfile.name,
+      email: adminProfile.email,
+      phone: adminProfile.phone,
+      avatar: adminProfile.avatar,
+      location: adminProfile.location,
+      department: adminProfile.department,
+      zone: adminProfile.zone
+    });
+  }, [adminProfile, isAdminProfileOpen]);
+
   // Password State
   const [passwords, setPasswords] = useState({
     current: '',

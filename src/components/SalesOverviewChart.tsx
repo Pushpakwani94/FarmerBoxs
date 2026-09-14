@@ -1,25 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useApp } from '../context/AppContext';
 import { monthlySalesChartData } from '../mockData';
 
 export const SalesOverviewChart: React.FC = () => {
+  const { orders, isDatabaseConnected } = useApp();
   const [period, setPeriod] = useState<'This Month' | 'Last Month'>('This Month');
 
-  const lastMonthData = [
-    { date: '1 Aug', sales: 180000 },
-    { date: '5 Aug', sales: 210000 },
-    { date: '10 Aug', sales: 290000 },
-    { date: '15 Aug', sales: 310000 },
-    { date: '20 Aug', sales: 420000 },
-    { date: '25 Aug', sales: 510000 },
-    { date: '31 Aug', sales: 620000 }
-  ];
+  const currentData = useMemo(() => {
+    if (!isDatabaseConnected) {
+      return period === 'This Month' ? monthlySalesChartData : [
+        { date: '1 Aug', sales: 180000 },
+        { date: '5 Aug', sales: 210000 },
+        { date: '10 Aug', sales: 290000 },
+        { date: '15 Aug', sales: 310000 },
+        { date: '20 Aug', sales: 420000 },
+        { date: '25 Aug', sales: 510000 },
+        { date: '31 Aug', sales: 620000 }
+      ];
+    }
 
-  const currentData = period === 'This Month' ? monthlySalesChartData : lastMonthData;
+    if (orders.length === 0) {
+      return [
+        { date: '1st', sales: 0 },
+        { date: '10th', sales: 0 },
+        { date: '20th', sales: 0 },
+        { date: 'Today', sales: 0 }
+      ];
+    }
+
+    const map = new Map<string, number>();
+    orders.forEach(o => {
+      const d = o.date || 'Today';
+      map.set(d, (map.get(d) || 0) + (Number(o.amount) || 0));
+    });
+
+    return Array.from(map.entries()).map(([date, sales]) => ({ date, sales }));
+  }, [orders, isDatabaseConnected, period]);
+
+  const maxSales = Math.max(10000, ...currentData.map(d => d.sales));
 
   const formatYAxis = (val: number) => {
     if (val === 0) return '0';
-    return `${val / 100000}L`;
+    if (val >= 100000) return `${(val / 100000).toFixed(1)}L`;
+    if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
+    return `${val}`;
   };
 
   return (
@@ -54,8 +79,7 @@ export const SalesOverviewChart: React.FC = () => {
               tickLine={false}
               tick={{ fontSize: 10, fill: '#64748b' }}
               tickFormatter={formatYAxis}
-              domain={[0, 800000]}
-              ticks={[0, 200000, 400000, 600000, 800000]}
+              domain={[0, Math.ceil(maxSales * 1.2)]}
             />
             <Tooltip
               formatter={(value: any) => [`₹${Number(value || 0).toLocaleString('en-IN')}`, 'Sales']}

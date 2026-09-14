@@ -4,16 +4,50 @@ import { CreditCard, Wallet, ArrowDownRight, ArrowUpRight, Plus, Search, Eye, Do
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 export const PaymentsPage: React.FC = () => {
-  const { payments } = useApp();
+  const { payments, orders, isDatabaseConnected, setActiveTab: setAppActiveTab } = useApp();
   const [activeTab, setActiveTab] = useState<'All Transactions' | 'Order Payments' | 'Joiner Payouts' | 'Driver Payouts' | 'Refunds'>('All Transactions');
+  const [searchTerm, setSearchTerm] = useState('');
 
+  // Dynamically calculate metrics from live payments & orders
+  const totalAmount = payments.length > 0
+    ? payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    : orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+  const onlineAmount = payments.length > 0
+    ? payments.filter(p => p.paymentMode?.toLowerCase().includes('online') || p.paymentMode?.toLowerCase().includes('upi') || p.paymentMode?.toLowerCase().includes('card')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    : orders.filter(o => o.paymentMode === 'Online').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+  const codAmount = payments.length > 0
+    ? payments.filter(p => p.paymentMode?.toLowerCase().includes('cod')).reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    : orders.filter(o => o.paymentMode === 'COD').reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+
+  const commissionAmount = payments.filter(p => p.type === 'Joiner Commission').reduce((sum, p) => sum + (Number(p.amount) || 0), 0) ||
+    orders.reduce((sum, o) => sum + (Number(o.commission) || 0), 0);
+
+  const refundAmount = payments.filter(p => p.type === 'Refund' || p.status === 'Refunded').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  const onlinePercent = totalAmount > 0 ? Math.round((onlineAmount / totalAmount) * 100) : 0;
+  const codPercent = totalAmount > 0 ? Math.round((codAmount / totalAmount) * 100) : 0;
+  const commissionPercent = totalAmount > 0 ? Math.round((commissionAmount / totalAmount) * 100) : 0;
+
+  // Dynamic Pie Chart Data
   const pieData = [
-    { name: 'UPI', value: 38, color: '#22c55e' },
-    { name: 'Card', value: 24, color: '#3b82f6' },
-    { name: 'COD', value: 23, color: '#f97316' },
-    { name: 'Wallet', value: 10, color: '#a855f7' },
-    { name: 'Others', value: 5, color: '#94a3b8' }
+    { name: 'Online / UPI', value: onlinePercent || (totalAmount > 0 ? 60 : 0), color: '#22c55e' },
+    { name: 'COD', value: codPercent || (totalAmount > 0 ? 30 : 0), color: '#f97316' },
+    { name: 'Commission', value: commissionPercent || (totalAmount > 0 ? 10 : 0), color: '#a855f7' }
   ];
+
+  const filteredPayments = payments.filter(p => {
+    if (activeTab === 'Order Payments' && p.type !== 'Order Payment') return false;
+    if (activeTab === 'Joiner Payouts' && p.type !== 'Joiner Commission') return false;
+    if (activeTab === 'Driver Payouts' && p.type !== 'Driver Payout') return false;
+    if (activeTab === 'Refunds' && p.type !== 'Refund') return false;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      return p.fromTo?.toLowerCase().includes(s) || p.orderId?.toLowerCase().includes(s) || p.referenceId?.toLowerCase().includes(s);
+    }
+    return true;
+  });
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-5">
@@ -25,8 +59,8 @@ export const PaymentsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Payments</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹5,48,320</h3>
-            <p className="text-[10px] text-emerald-700 font-semibold mt-1">↑ +18% this month</p>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{totalAmount.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-emerald-700 font-semibold mt-1">Live collections</p>
           </div>
         </div>
 
@@ -36,8 +70,8 @@ export const PaymentsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Online Payments</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹3,62,450</h3>
-            <p className="text-[10px] text-sky-700 font-semibold mt-1">66% of total</p>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{onlineAmount.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-sky-700 font-semibold mt-1">{onlinePercent}% of total</p>
           </div>
         </div>
 
@@ -47,8 +81,8 @@ export const PaymentsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">COD Payments</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹1,25,870</h3>
-            <p className="text-[10px] text-amber-700 font-semibold mt-1">23% of total</p>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{codAmount.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-amber-700 font-semibold mt-1">{codPercent}% of total</p>
           </div>
         </div>
 
@@ -58,8 +92,8 @@ export const PaymentsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Joiner Commissions</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹24,500</h3>
-            <p className="text-[10px] text-purple-700 font-semibold mt-1">4.5% of total</p>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{commissionAmount.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-purple-700 font-semibold mt-1">{commissionPercent}% of total</p>
           </div>
         </div>
 
@@ -69,14 +103,17 @@ export const PaymentsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Refunds</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹5,500</h3>
-            <p className="text-[10px] text-rose-700 font-semibold mt-1">1% of total</p>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{refundAmount.toLocaleString('en-IN')}</h3>
+            <p className="text-[10px] text-rose-700 font-semibold mt-1">Processed</p>
           </div>
         </div>
 
         <div>
-          <button className="w-full h-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2">
-            <Plus className="w-4 h-4" /> Record Manual Payment
+          <button
+            onClick={() => setAppActiveTab('Orders')}
+            className="w-full h-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          >
+            <Plus className="w-4 h-4" /> View Live Orders
           </button>
         </div>
       </div>
@@ -123,7 +160,7 @@ export const PaymentsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between">
-            <h4 className="font-bold text-sm text-slate-800">Payments List (156)</h4>
+            <h4 className="font-bold text-sm text-slate-800">Payments List ({filteredPayments.length})</h4>
             <button className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1">
               📥 Export
             </button>
@@ -147,49 +184,55 @@ export const PaymentsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {payments.map(p => (
-                  <tr key={p.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-2"><input type="checkbox" /></td>
-                    <td className="py-2.5 px-2 text-slate-500">{p.id}</td>
-                    <td className="py-2.5 px-2 text-slate-600 text-[11px]">{p.dateTime}</td>
-                    <td className="py-2.5 px-2 font-mono text-slate-600">{p.referenceId}</td>
-                    <td className="py-2.5 px-2">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                        p.type === 'Order Payment' ? 'bg-emerald-100 text-emerald-800' :
-                        p.type === 'COD Payment' ? 'bg-amber-100 text-amber-800' :
-                        p.type === 'Joiner Commission' ? 'bg-purple-100 text-purple-800' :
-                        p.type === 'Driver Payout' ? 'bg-sky-100 text-sky-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {p.type}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-2 font-bold text-slate-800">{p.fromTo}</td>
-                    <td className="py-2.5 px-2 font-bold text-emerald-800">{p.orderId}</td>
-                    <td className="py-2.5 px-2 text-right font-bold text-slate-900">₹{p.amount.toLocaleString('en-IN')}</td>
-                    <td className="py-2.5 px-2 text-center">
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        p.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-2 text-slate-600 text-[11px]">{p.paymentMode}</td>
-                    <td className="py-2.5 px-2 text-center">
-                      <button className="p-1 text-slate-500 hover:text-blue-600"><Eye className="w-3.5 h-3.5" /></button>
+                {filteredPayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="py-8 text-center text-slate-400">
+                      No payment transactions found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredPayments.map(p => (
+                    <tr key={p.id} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-2"><input type="checkbox" /></td>
+                      <td className="py-2.5 px-2 text-slate-500">{p.id}</td>
+                      <td className="py-2.5 px-2 text-slate-600 text-[11px]">{p.dateTime}</td>
+                      <td className="py-2.5 px-2 font-mono text-slate-600">{p.referenceId}</td>
+                      <td className="py-2.5 px-2">
+                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                          p.type === 'Order Payment' ? 'bg-emerald-100 text-emerald-800' :
+                          p.type === 'COD Payment' ? 'bg-amber-100 text-amber-800' :
+                          p.type === 'Joiner Commission' ? 'bg-purple-100 text-purple-800' :
+                          p.type === 'Driver Payout' ? 'bg-sky-100 text-sky-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {p.type}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 font-bold text-slate-800">{p.fromTo}</td>
+                      <td className="py-2.5 px-2 font-bold text-emerald-800">{p.orderId}</td>
+                      <td className="py-2.5 px-2 text-right font-bold text-slate-900">₹{p.amount.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-2 text-center">
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                          p.status === 'Success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-2 text-slate-600 text-[11px]">{p.paymentMode}</td>
+                      <td className="py-2.5 px-2 text-center">
+                        <button className="p-1 text-slate-500 hover:text-blue-600"><Eye className="w-3.5 h-3.5" /></button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="flex items-center justify-between pt-2 text-xs text-slate-500">
-            <span>Showing 1 to 10 of 156 transactions</span>
+            <span>Showing 1 to {filteredPayments.length} of {filteredPayments.length} transactions</span>
             <div className="flex items-center gap-1">
               <button className="p-1 rounded border border-slate-200"><ChevronLeft className="w-3.5 h-3.5" /></button>
               <span className="px-2.5 py-1 bg-emerald-700 text-white rounded font-bold text-xs">1</span>
-              <span className="px-2 py-1 rounded border text-xs">2</span>
-              <span className="px-2 py-1 rounded border text-xs">3</span>
               <button className="p-1 rounded border border-slate-200"><ChevronRight className="w-3.5 h-3.5" /></button>
             </div>
           </div>
@@ -211,7 +254,7 @@ export const PaymentsPage: React.FC = () => {
                 </RechartsPie>
               </ResponsiveContainer>
               <div className="absolute text-center">
-                <p className="font-extrabold text-slate-800 text-base">₹5,48,320</p>
+                <p className="font-extrabold text-slate-800 text-base">₹{totalAmount.toLocaleString('en-IN')}</p>
                 <p className="text-[10px] text-slate-400">Total Payments</p>
               </div>
             </div>
@@ -231,25 +274,53 @@ export const PaymentsPage: React.FC = () => {
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-sm text-slate-800">Recent Payments</h3>
-              <button className="text-xs text-blue-600 font-semibold">View All</button>
+              <button onClick={() => setAppActiveTab('Orders')} className="text-xs text-blue-600 font-semibold hover:underline">View All</button>
             </div>
 
             <div className="space-y-2 text-xs">
-              {[
-                { title: 'Hotel Spice Villa', sub: 'Order Payment • FB1001', amount: '+₹2,500', time: '11 Sep, 10:24 AM', color: 'text-emerald-700' },
-                { title: 'Rahul Patil', sub: 'Joiner Commission', amount: '+₹100', time: '11 Sep, 09:45 AM', color: 'text-purple-700' },
-                { title: 'Suresh Kumar', sub: 'Driver Payout', amount: '+₹60', time: '11 Sep, 09:20 AM', color: 'text-sky-700' },
-                { title: 'Hotel City Tadka', sub: 'Refund • FB1007', amount: '-₹500', time: '10 Sep, 06:45 PM', color: 'text-rose-600' },
-                { title: 'Hotel Green Leaf', sub: 'Order Payment • FB1005', amount: '+₹4,000', time: '10 Sep, 04:20 PM', color: 'text-emerald-700' }
-              ].map((tx, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
-                  <div>
-                    <p className="font-bold text-slate-800">{tx.title}</p>
-                    <p className="text-[10px] text-slate-400">{tx.sub} • {tx.time}</p>
+              {(payments.length > 0
+                ? payments.slice(0, 5).map(p => ({
+                    title: p.fromTo || 'Payment',
+                    sub: `${p.type} • ${p.orderId || p.referenceId}`,
+                    amount: `${p.type === 'Refund' ? '-' : '+'}₹${Number(p.amount || 0).toLocaleString('en-IN')}`,
+                    time: p.dateTime,
+                    color: p.type === 'Refund' ? 'text-rose-600' : p.type === 'Joiner Commission' ? 'text-purple-700' : 'text-emerald-700'
+                  }))
+                : orders.slice(0, 5).map(o => ({
+                    title: o.hotelName,
+                    sub: `Order Payment • ${o.id}`,
+                    amount: `+₹${Number(o.amount || 0).toLocaleString('en-IN')}`,
+                    time: `${o.date} ${o.time}`,
+                    color: 'text-emerald-700'
+                  }))
+              ).length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-xs">No recent payments recorded.</div>
+              ) : (
+                (payments.length > 0
+                  ? payments.slice(0, 5).map(p => ({
+                      title: p.fromTo || 'Payment',
+                      sub: `${p.type} • ${p.orderId || p.referenceId}`,
+                      amount: `${p.type === 'Refund' ? '-' : '+'}₹${Number(p.amount || 0).toLocaleString('en-IN')}`,
+                      time: p.dateTime,
+                      color: p.type === 'Refund' ? 'text-rose-600' : p.type === 'Joiner Commission' ? 'text-purple-700' : 'text-emerald-700'
+                    }))
+                  : orders.slice(0, 5).map(o => ({
+                      title: o.hotelName,
+                      sub: `Order Payment • ${o.id}`,
+                      amount: `+₹${Number(o.amount || 0).toLocaleString('en-IN')}`,
+                      time: `${o.date} ${o.time}`,
+                      color: 'text-emerald-700'
+                    }))
+                ).map((tx, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
+                    <div>
+                      <p className="font-bold text-slate-800">{tx.title}</p>
+                      <p className="text-[10px] text-slate-400">{tx.sub} • {tx.time}</p>
+                    </div>
+                    <span className={`font-bold ${tx.color}`}>{tx.amount}</span>
                   </div>
-                  <span className={`font-bold ${tx.color}`}>{tx.amount}</span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             {/* Quick Actions Grid */}

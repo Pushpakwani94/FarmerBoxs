@@ -277,7 +277,17 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     const unsubOrders = subscribeToCollection<MobileOrder>('orders', isConnected ? [] : defaultOrders, (o) => {
       setOrders(o);
     });
-    const unsubNotifs = subscribeToCollection<MobileNotification>('notifications', isConnected ? [] : defaultNotifications, setNotifications);
+    const unsubNotifs = subscribeToCollection<any>('notifications', isConnected ? [] : defaultNotifications, (rawNotifs) => {
+      const mapped: MobileNotification[] = (rawNotifs || []).map((n: any) => ({
+        id: String(n.id || Date.now()),
+        title: n.title || 'Notification',
+        subtitle: n.subtitle || n.message || 'New alert',
+        time: n.time || n.dateTime || 'Just now',
+        category: n.category || (n.userType === 'Hotels' ? 'Hotels' : n.userType === 'Joiners' ? 'Commission' : 'Orders'),
+        iconType: n.iconType || (n.category === 'Hotels' ? 'hotel' : n.category === 'Commission' ? 'commission' : 'order')
+      }));
+      setNotifications(mapped);
+    });
 
     return () => {
       unsubHotels();
@@ -303,12 +313,19 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const addNotification = (notifData: Omit<MobileNotification, 'id'>) => {
-    const newNotif: MobileNotification = {
-      id: String(Date.now()),
-      ...notifData
+    const docId = String(Date.now());
+    const nowStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const newNotif = {
+      id: docId,
+      ...notifData,
+      message: notifData.subtitle || notifData.title,
+      dateTime: nowStr,
+      userType: 'Joiners',
+      status: 'Sent',
+      read: false
     };
-    saveRecord('notifications', newNotif);
-    setNotifications(prev => [newNotif, ...prev]);
+    saveRecord('notifications', newNotif, docId);
+    setNotifications(prev => [newNotif as unknown as MobileNotification, ...prev]);
     playNotificationSound('notification');
   };
 

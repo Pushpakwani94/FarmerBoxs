@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Mail,
@@ -19,7 +19,9 @@ import {
   Bell,
   Sliders,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Link as LinkIcon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -34,11 +36,27 @@ export const AdminProfilePage: React.FC = () => {
     location: adminProfile.location,
     department: adminProfile.department,
     zone: adminProfile.zone,
-    bio: 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
-    emergencyContact: '+91 98220 11223 (Operations Manager)',
-    timezone: '(GMT+05:30) Asia/Kolkata',
-    language: 'English (India)'
+    bio: adminProfile.bio || 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
+    emergencyContact: adminProfile.emergencyContact || '+91 98220 11223 (Operations Manager)',
+    timezone: adminProfile.timezone || '(GMT+05:30) Asia/Kolkata',
+    language: adminProfile.language || 'English (India)'
   });
+
+  useEffect(() => {
+    setFormData({
+      name: adminProfile.name,
+      email: adminProfile.email,
+      phone: adminProfile.phone,
+      avatar: adminProfile.avatar,
+      location: adminProfile.location,
+      department: adminProfile.department,
+      zone: adminProfile.zone,
+      bio: adminProfile.bio || 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
+      emergencyContact: adminProfile.emergencyContact || '+91 98220 11223 (Operations Manager)',
+      timezone: adminProfile.timezone || '(GMT+05:30) Asia/Kolkata',
+      language: adminProfile.language || 'English (India)'
+    });
+  }, [adminProfile]);
 
   const [passwords, setPasswords] = useState({
     current: '',
@@ -48,6 +66,9 @@ export const AdminProfilePage: React.FC = () => {
 
   const [activeSettingsTab, setActiveSettingsTab] = useState<'PERSONAL' | 'SECURITY' | 'NOTIFICATIONS'>('PERSONAL');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [toastMessage, setToastMessage] = useState('Profile successfully updated!');
+  const [showCustomAvatarInput, setShowCustomAvatarInput] = useState(false);
+  const [customAvatarUrl, setCustomAvatarUrl] = useState('');
 
   const avatarOptions = [
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
@@ -56,6 +77,12 @@ export const AdminProfilePage: React.FC = () => {
     'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300',
     'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300'
   ];
+
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,10 +93,13 @@ export const AdminProfilePage: React.FC = () => {
       avatar: formData.avatar,
       location: formData.location,
       department: formData.department,
-      zone: formData.zone
+      zone: formData.zone,
+      bio: formData.bio,
+      emergencyContact: formData.emergencyContact,
+      timezone: formData.timezone,
+      language: formData.language
     });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    triggerToast('Profile successfully updated and saved!');
   };
 
   const handlePasswordUpdate = (e: React.FormEvent) => {
@@ -86,13 +116,30 @@ export const AdminProfilePage: React.FC = () => {
       alert('Password must be at least 6 characters');
       return;
     }
-    setSaveSuccess(true);
     setPasswords({ current: '', newPass: '', confirmPass: '' });
-    setTimeout(() => setSaveSuccess(false), 3000);
+    triggerToast('Password successfully changed!');
+  };
+
+  const handleApplyCustomAvatar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customAvatarUrl.trim()) return;
+    setFormData(prev => ({ ...prev, avatar: customAvatarUrl.trim() }));
+    updateAdminProfile({ avatar: customAvatarUrl.trim() });
+    setShowCustomAvatarInput(false);
+    setCustomAvatarUrl('');
+    triggerToast('Profile avatar updated!');
   };
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6 select-none">
+      {/* Toast Alert */}
+      {saveSuccess && (
+        <div className="fixed top-5 right-6 z-50 px-4 py-3 bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2.5 shadow-xl border border-emerald-500 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Top Banner & Breadcrumb */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
         <div>
@@ -101,13 +148,6 @@ export const AdminProfilePage: React.FC = () => {
             Manage your personal profile, security credentials, and system administrator settings.
           </p>
         </div>
-
-        {saveSuccess && (
-          <div className="px-3.5 py-1.5 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Profile successfully updated!</span>
-          </div>
-        )}
       </div>
 
       {/* Top Metric Cards (4 Cards) */}
@@ -140,7 +180,7 @@ export const AdminProfilePage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-500">Assigned Zone</p>
-            <h3 className="text-xl font-black text-slate-900 leading-none mt-1">All 11 Zones</h3>
+            <h3 className="text-xl font-black text-slate-900 leading-none mt-1">{adminProfile.zone || 'All Zones (HQ)'}</h3>
             <p className="text-[10px] text-purple-700 font-semibold mt-1">Pune Central HQ</p>
           </div>
         </div>
@@ -165,8 +205,8 @@ export const AdminProfilePage: React.FC = () => {
           <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-2xs text-center space-y-4">
             <div className="relative inline-block mx-auto">
               <img
-                src={formData.avatar}
-                alt={formData.name}
+                src={adminProfile.avatar || formData.avatar}
+                alt={adminProfile.name}
                 className="w-28 h-28 rounded-full object-cover border-4 border-emerald-100 shadow-md mx-auto"
               />
               <span className="absolute bottom-1 right-2 w-5 h-5 bg-emerald-500 border-2 border-white rounded-full"></span>
@@ -174,23 +214,77 @@ export const AdminProfilePage: React.FC = () => {
 
             <div>
               <h3 className="text-lg font-black text-slate-900">{adminProfile.name}</h3>
-              <p className="text-xs font-bold text-emerald-700 mt-0.5">{adminProfile.role}</p>
-              <p className="text-[11px] text-slate-400 font-medium">{adminProfile.department}</p>
+              <p className="text-xs font-bold text-emerald-700 mt-0.5">{adminProfile.role || 'Super Admin'}</p>
+              <p className="text-[11px] text-slate-500 font-medium">{adminProfile.department || 'Operations & Management'}</p>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-slate-100">
-              <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-[11px] font-semibold flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-emerald-600" /> {adminProfile.location}
-              </span>
-              <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-full text-[11px] font-bold">
-                ✓ Full Admin Access
-              </span>
+            {/* Quick Contact & Zone Info List */}
+            <div className="pt-3 border-t border-slate-100 text-left space-y-2.5 text-xs text-slate-700">
+              <div className="flex items-center gap-2 text-slate-600">
+                <Mail className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="font-semibold text-slate-900 truncate">{adminProfile.email}</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="font-semibold text-slate-900">{adminProfile.phone}</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="font-semibold text-slate-900">{adminProfile.department}</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="font-semibold text-slate-900">{adminProfile.location}</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-600">
+                <Shield className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                <span className="font-semibold text-slate-900">{adminProfile.zone}</span>
+              </div>
+              {adminProfile.emergencyContact && (
+                <div className="flex items-center gap-2 text-slate-600">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="text-[11px] font-medium text-slate-800">{adminProfile.emergencyContact}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Bio Box */}
+            <div className="text-left bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 leading-relaxed italic">
+              "{adminProfile.bio || formData.bio}"
             </div>
 
             {/* Quick Avatar Selector */}
             <div className="pt-3 border-t border-slate-100 text-left">
-              <label className="block text-slate-600 font-bold text-xs mb-2">Select Profile Avatar</label>
-              <div className="flex items-center justify-center gap-2.5">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-slate-700 font-bold text-xs">Profile Avatar</label>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomAvatarInput(!showCustomAvatarInput)}
+                  className="text-[10px] text-emerald-700 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <LinkIcon className="w-3 h-3" /> Custom URL
+                </button>
+              </div>
+
+              {showCustomAvatarInput && (
+                <form onSubmit={handleApplyCustomAvatar} className="mb-2.5 flex gap-1.5">
+                  <input
+                    type="url"
+                    placeholder="https://example.com/avatar.jpg"
+                    value={customAvatarUrl}
+                    onChange={e => setCustomAvatarUrl(e.target.value)}
+                    className="flex-1 text-[11px] px-2.5 py-1.5 border border-slate-200 rounded-lg focus:outline-emerald-600"
+                  />
+                  <button
+                    type="submit"
+                    className="px-2.5 py-1.5 bg-emerald-700 text-white rounded-lg text-[11px] font-bold cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </form>
+              )}
+
+              <div className="flex items-center justify-center gap-2">
                 {avatarOptions.map((av, idx) => (
                   <button
                     key={idx}
@@ -198,9 +292,10 @@ export const AdminProfilePage: React.FC = () => {
                     onClick={() => {
                       setFormData({ ...formData, avatar: av });
                       updateAdminProfile({ avatar: av });
+                      triggerToast('Avatar updated!');
                     }}
                     className={`w-9 h-9 rounded-full overflow-hidden border-2 transition-transform cursor-pointer ${
-                      formData.avatar === av
+                      adminProfile.avatar === av
                         ? 'border-[#15803d] ring-2 ring-emerald-300 scale-105'
                         : 'border-slate-200 hover:border-slate-400'
                     }`}
@@ -361,12 +456,16 @@ export const AdminProfilePage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-slate-700 font-bold mb-1">Timezone</label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.timezone}
-                      readOnly
-                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-100 text-slate-600 font-medium cursor-not-allowed"
-                    />
+                      onChange={e => setFormData({ ...formData, timezone: e.target.value })}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-[#15803d]"
+                    >
+                      <option value="(GMT+05:30) Asia/Kolkata">(GMT+05:30) Asia/Kolkata (India Standard Time)</option>
+                      <option value="(GMT+04:00) Asia/Dubai">(GMT+04:00) Asia/Dubai (Gulf Standard Time)</option>
+                      <option value="(GMT+00:00) UTC">(GMT+00:00) UTC (Universal Coordinated Time)</option>
+                      <option value="(GMT-05:00) America/New_York">(GMT-05:00) Eastern Time (US & Canada)</option>
+                    </select>
                   </div>
 
                   <div>

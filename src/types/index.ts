@@ -165,14 +165,17 @@ export interface PaymentTransaction {
 }
 
 export interface NotificationItem {
-  id: number;
+  id: number | string;
   title: string;
-  message: string;
-  userType: 'Hotels' | 'Drivers' | 'Joiners' | 'Admins' | 'All Users';
-  status: 'Sent' | 'Scheduled' | 'Failed';
-  dateTime: string;
+  message?: string;
+  subtitle?: string;
+  userType?: 'Hotels' | 'Drivers' | 'Joiners' | 'Admins' | 'All Users' | string;
+  status?: 'Sent' | 'Scheduled' | 'Failed' | string;
+  dateTime?: string;
   read?: boolean;
   time?: string;
+  category?: string;
+  iconType?: string;
 }
 
 // Runtime exports for Vite ES module safety

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { Search, Bell, Menu, Calendar, X, Building2, ShoppingBag, Users, Download, Smartphone } from 'lucide-react';
+import { Search, Bell, Menu, Calendar, X, Building2, ShoppingBag, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { ApkDownloadModal } from './Modals/ApkDownloadModal';
 import { FirebaseStatusBadge } from './FirebaseStatusBadge';
 
 export const Header: React.FC = () => {
@@ -16,11 +15,11 @@ export const Header: React.FC = () => {
     setSelectedJoiner,
     setSelectedHotel,
     adminProfile,
-    setIsAdminProfileOpen
+    setIsAdminProfileOpen,
+    notifications
   } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isApkModalOpen, setIsApkModalOpen] = useState(false);
 
   const trimmed = searchQuery.trim().toLowerCase();
   const matchingHotels = trimmed ? hotels.filter(h => h.name.toLowerCase().includes(trimmed) || h.zone.toLowerCase().includes(trimmed)).slice(0, 3) : [];
@@ -165,29 +164,18 @@ export const Header: React.FC = () => {
         {/* Firebase Cloud Database Status */}
         <FirebaseStatusBadge />
 
-        {/* Quick APK Download Action */}
-        <button
-          onClick={() => setIsApkModalOpen(true)}
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#15803d] to-[#16a34a] hover:from-[#166534] hover:to-[#15803d] text-white text-xs font-extrabold rounded-xl shadow-xs transition-all cursor-pointer transform hover:scale-102"
-          title="Download Joiner Android App APK (v2.4.1)"
-        >
-          <Smartphone className="w-3.5 h-3.5 text-emerald-200" />
-          <span>Get Joiner APK</span>
-          <span className="px-1.5 py-0.2 bg-white/20 rounded text-[9px] font-black uppercase">
-            v2.4
-          </span>
-        </button>
-
         {/* Notification Bell */}
         <button
-          onClick={() => setIsNotificationsOpen(true)}
+          onClick={() => setActiveTab('Notifications')}
           className="relative p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-          title="Open Notifications"
+          title="Open Notifications Full Page"
         >
           <Bell className="w-5 h-5" />
-          <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-            5
-          </span>
+          {notifications.filter(n => !n.read).length > 0 && (
+            <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-pulse">
+              {notifications.filter(n => !n.read).length}
+            </span>
+          )}
         </button>
 
         {/* Admin Profile */}
@@ -213,12 +201,9 @@ export const Header: React.FC = () => {
         {/* Date Display */}
         <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
-          <span>Thu, 11 Sep 2026</span>
+          <span>{new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
         </div>
       </div>
-
-      {/* APK Download & QR Scan Modal */}
-      <ApkDownloadModal isOpen={isApkModalOpen} onClose={() => setIsApkModalOpen(false)} />
     </header>
   );
 };
