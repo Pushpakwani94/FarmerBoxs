@@ -142,13 +142,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Subscriptions to Cloud Firestore (Dummy data removed if Firebase is connected)
+  // Subscriptions to Cloud Firestore
   useEffect(() => {
-    // If Firebase is active, purge any old mock data from local storage
-    if (isConnected) {
-      clearLocalDummyCache();
-    }
-
     const unsubOrders = subscribeToCollection<Order>('orders', isConnected ? [] : initialOrders, setOrders);
     const unsubZones = subscribeToCollection<Zone>('zones', isConnected ? [] : initialZones, (z) => {
       setZones(z);
