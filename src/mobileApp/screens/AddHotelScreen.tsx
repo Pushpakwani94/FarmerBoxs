@@ -37,7 +37,12 @@ export const AddHotelScreen: React.FC = () => {
 
     addHotel({
       name: hotelName,
+      contactPerson: ownerName,
+      phone: mobile,
+      address,
       zone,
+      gst,
+      fssai,
       orders: 0,
       status: 'Active',
       image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=100'

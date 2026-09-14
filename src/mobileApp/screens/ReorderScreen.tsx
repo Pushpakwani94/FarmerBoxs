@@ -24,23 +24,42 @@ export const ReorderScreen: React.FC = () => {
     status: 'Delivered'
   };
 
-  const reorderItems = [
-    { product: products[0], defaultQty: 10 },
-    { product: products[1], defaultQty: 5 },
-    { product: products[2], defaultQty: 10 },
-    { product: products[3], defaultQty: 2 }
-  ];
+  const reorderItems = React.useMemo(() => {
+    if (selectedOrderForReorder?.items && selectedOrderForReorder.items.length > 0) {
+      return selectedOrderForReorder.items.map((item: any) => {
+        const prod = item.product || {
+          id: item.id || 1,
+          name: item.productName || item.name || 'Produce Item',
+          price: Number(item.price || 30),
+          unit: item.unit || 'kg',
+          category: 'Vegetables' as const,
+          image: '/products/fenugreek.jpg',
+          stock: 100
+        };
+        return {
+          product: prod,
+          defaultQty: Number(item.quantity || item.qty || 1)
+        };
+      });
+    }
+    return products.slice(0, 4).map(p => ({
+      product: p,
+      defaultQty: 2
+    }));
+  }, [selectedOrderForReorder, products]);
 
-  const handleUpdateQty = (productId: number, delta: number) => {
+  const handleUpdateQty = (productId: number | string, delta: number) => {
     setQuantities(prev => ({
       ...prev,
-      [productId]: Math.max(1, (prev[productId] || 1) + delta)
+      [productId]: Math.max(1, (prev[productId as any] || 1) + delta)
     }));
   };
 
   const handleAddToCart = () => {
     reorderItems.forEach(item => {
-      updateCartQty(item.product.id, quantities[item.product.id] || item.defaultQty);
+      if (item.product) {
+        updateCartQty(item.product.id, quantities[item.product.id as any] || item.defaultQty);
+      }
     });
     setCurrentScreen('CART');
   };
@@ -77,7 +96,7 @@ export const ReorderScreen: React.FC = () => {
 
         {/* Items List */}
         <div className="space-y-2">
-          {reorderItems.map(({ product }) => {
+          {reorderItems.filter(item => Boolean(item.product)).map(({ product }) => {
             const qty = quantities[product.id] || 1;
 
             return (

@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { soundEngine } from './utils/sound';
 import { subscribeToCollection, saveRecord } from '../firebase/dbService';
-import { isFirebaseConfigured } from '../firebase/config';
 
 export type MobileScreen =
   | 'WELCOME'
@@ -20,21 +19,28 @@ export type MobileScreen =
   | 'PROFILE';
 
 export interface MobileHotel {
-  id: number;
+  id: number | string;
+  hotelId?: string;
   name: string;
   zone: string;
+  contactPerson?: string;
+  phone?: string;
+  address?: string;
+  gst?: string;
+  fssai?: string;
   orders: number;
   status: 'Active' | 'Pending' | 'Inactive';
   image: string;
 }
 
 export interface MobileProduct {
-  id: number;
+  id: number | string;
   name: string;
   category: 'Vegetables' | 'Fruits' | 'Leafy' | 'Other';
   price: number;
   unit: string;
   image: string;
+  stock: number;
 }
 
 export interface CartItem {
@@ -44,13 +50,24 @@ export interface CartItem {
 
 export interface MobileOrder {
   id: string;
+  orderId?: string;
+  hotelId?: string | number;
   hotelName: string;
   hotelZone: string;
+  zone?: string;
+  joiner?: string;
+  joinerId?: string | number;
   date: string;
   timeSlot: string;
   amount: number;
-  status: 'Pending' | 'Confirmed' | 'Delivered';
-  items: CartItem[];
+  subtotal?: number;
+  totalAmount?: number;
+  deliveryCharge?: number;
+  paymentMode?: string;
+  paymentStatus?: string;
+  status: 'Pending' | 'Confirmed' | 'Delivered' | 'Out for Delivery' | 'Preparing' | 'Cancelled';
+  orderStatus?: string;
+  items: any[];
 }
 
 export interface MobileNotification {
@@ -62,18 +79,29 @@ export interface MobileNotification {
   iconType: 'order' | 'hotel' | 'commission' | 'product' | 'system';
 }
 
+export interface JoinerUserProfile {
+  name: string;
+  role: string;
+  zone: string;
+  phone: string;
+  email: string;
+  avatar: string;
+  totalHotels: number;
+  totalOrders: number;
+}
+
 interface JoinerAppContextType {
   currentScreen: MobileScreen;
   setCurrentScreen: (screen: MobileScreen) => void;
   selectedHotel: MobileHotel | null;
   setSelectedHotel: (hotel: MobileHotel | null) => void;
   hotels: MobileHotel[];
-  addHotel: (hotel: Omit<MobileHotel, 'id'>) => void;
+  addHotel: (hotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => void;
   products: MobileProduct[];
   cart: CartItem[];
   addToCart: (product: MobileProduct) => void;
-  updateCartQty: (productId: number, qty: number) => void;
-  removeFromCart: (productId: number) => void;
+  updateCartQty: (productId: number | string, qty: number) => void;
+  removeFromCart: (productId: number | string) => void;
   clearCart: () => void;
   cartTotal: number;
   orders: MobileOrder[];
@@ -99,186 +127,132 @@ interface JoinerAppContextType {
     amount: number;
     status: 'Paid' | 'Pending';
   }>;
-  userProfile: {
-    name: string;
-    role: string;
-    zone: string;
-    phone: string;
-    email: string;
-    avatar: string;
-    totalHotels: number;
-    totalOrders: number;
-  };
+  userProfile: JoinerUserProfile;
   registerUser: (data: { name: string; phone: string; email: string; zone: string }) => void;
   loginUser: (phone: string) => void;
-  updateUserProfile: (data: Partial<{
-    name: string;
-    role: string;
-    zone: string;
-    phone: string;
-    email: string;
-    avatar: string;
-    totalHotels: number;
-    totalOrders: number;
-  }>) => void;
+  updateUserProfile: (data: Partial<JoinerUserProfile>) => void;
 }
-
-const defaultHotels: MobileHotel[] = [
-  { id: 1, name: 'Hotel Spice Villa', zone: 'Kharadi', orders: 320, status: 'Active', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100' },
-  { id: 2, name: 'Hotel Grand Pune', zone: 'Viman Nagar', orders: 280, status: 'Active', image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=100' },
-  { id: 3, name: 'Hotel Green Leaf', zone: 'Mundhwa', orders: 190, status: 'Active', image: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=100' },
-  { id: 4, name: 'Hotel Maharaja', zone: 'EON IT Park', orders: 210, status: 'Active', image: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?w=100' },
-  { id: 5, name: 'Hotel Sai Sagar', zone: 'Kharadi', orders: 175, status: 'Pending', image: 'https://images.unsplash.com/photo-1537047902294-62a40c20a6ae?w=100' },
-  { id: 6, name: 'Hotel Shree Palace', zone: 'Viman Nagar', orders: 140, status: 'Active', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=100' }
-];
-
-const defaultProducts: MobileProduct[] = [
-  { id: 101, name: 'Fresh Fenugreek (Methi)', category: 'Leafy', price: 25, unit: 'bunch', image: '/products/fenugreek.jpg' },
-  { id: 102, name: 'Green Pumpkin (Kaddu)', category: 'Vegetables', price: 35, unit: 'kg', image: '/products/pumpkin.jpg' },
-  { id: 103, name: 'Eggplant / Brinjal (Baingan)', category: 'Vegetables', price: 42, unit: 'kg', image: '/products/brinjal.jpg' },
-  { id: 104, name: 'Fresh Mint (Pudina)', category: 'Leafy', price: 18, unit: 'bunch', image: '/products/mint.jpg' },
-  { id: 105, name: 'Fresh Ginger (Adrak)', category: 'Vegetables', price: 90, unit: 'kg', image: '/products/ginger.jpg' },
-  { id: 1, name: 'Tomato', category: 'Vegetables', price: 30, unit: 'kg', image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200' },
-  { id: 2, name: 'Onion', category: 'Vegetables', price: 28, unit: 'kg', image: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8ce?w=200' },
-  { id: 3, name: 'Potato', category: 'Vegetables', price: 24, unit: 'kg', image: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=200' },
-  { id: 4, name: 'Green Chilli', category: 'Vegetables', price: 40, unit: 'kg', image: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=200' },
-  { id: 5, name: 'Capsicum', category: 'Vegetables', price: 60, unit: 'kg', image: 'https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=200' },
-  { id: 6, name: 'Carrot', category: 'Vegetables', price: 45, unit: 'kg', image: 'https://images.unsplash.com/photo-1447175008436-0841709069c0?w=200' },
-  { id: 7, name: 'Cabbage', category: 'Leafy', price: 35, unit: 'kg', image: 'https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=200' },
-  { id: 8, name: 'Fresh Coriander', category: 'Leafy', price: 20, unit: 'bunch', image: 'https://images.unsplash.com/photo-1608686207856-001b95cf60ca?w=200' },
-  { id: 9, name: 'Banana Robusta', category: 'Fruits', price: 45, unit: 'dozen', image: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=200' }
-];
-
-const defaultInitialCart: CartItem[] = [
-  { product: defaultProducts[0], quantity: 5 },  // Methi 5 bunch * 25 = 125
-  { product: defaultProducts[1], quantity: 2 },  // Pumpkin 2kg * 35 = 70
-  { product: defaultProducts[2], quantity: 4 },  // Brinjal 4kg * 42 = 168
-  { product: defaultProducts[3], quantity: 3 },  // Mint 3 bunch * 18 = 54
-  { product: defaultProducts[4], quantity: 2 }   // Ginger 2kg * 90 = 180
-];
-
-const defaultOrders: MobileOrder[] = [
-  {
-    id: '#FB1001',
-    hotelName: 'Hotel Spice Villa',
-    hotelZone: 'Kharadi',
-    date: '12 Sep 2026',
-    timeSlot: '8 AM - 10 AM',
-    amount: 680,
-    status: 'Delivered',
-    items: [
-      { product: defaultProducts[0], quantity: 10 },
-      { product: defaultProducts[1], quantity: 5 },
-      { product: defaultProducts[2], quantity: 10 },
-      { product: defaultProducts[3], quantity: 2 }
-    ]
-  },
-  {
-    id: '#FB1002',
-    hotelName: 'Hotel Grand Pune',
-    hotelZone: 'Viman Nagar',
-    date: '11 Sep 2026',
-    timeSlot: '7 AM - 9 AM',
-    amount: 1200,
-    status: 'Confirmed',
-    items: [
-      { product: defaultProducts[0], quantity: 20 },
-      { product: defaultProducts[4], quantity: 10 }
-    ]
-  },
-  {
-    id: '#FB1003',
-    hotelName: 'Hotel Green Leaf',
-    hotelZone: 'Mundhwa',
-    date: '10 Sep 2026',
-    timeSlot: '9 AM - 11 AM',
-    amount: 950,
-    status: 'Pending',
-    items: [
-      { product: defaultProducts[2], quantity: 25 },
-      { product: defaultProducts[1], quantity: 10 }
-    ]
-  },
-  {
-    id: '#FB1004',
-    hotelName: 'Hotel Maharaja',
-    hotelZone: 'EON IT Park',
-    date: '09 Sep 2026',
-    timeSlot: '8 AM - 10 AM',
-    amount: 1450,
-    status: 'Delivered',
-    items: [
-      { product: defaultProducts[0], quantity: 30 },
-      { product: defaultProducts[3], quantity: 5 }
-    ]
-  }
-];
-
-const defaultNotifications: MobileNotification[] = [
-  { id: '1', title: 'New order received', subtitle: 'Hotel Spice Villa • ₹760', time: '10:45 AM', category: 'Orders', iconType: 'order' },
-  { id: '2', title: 'Hotel approved', subtitle: 'Hotel Sai Sagar', time: 'Yesterday', category: 'Hotels', iconType: 'hotel' },
-  { id: '3', title: 'Commission credited', subtitle: '₹100 for order #FB1001', time: 'Yesterday', category: 'Commission', iconType: 'commission' },
-  { id: '4', title: 'Order delivered', subtitle: 'Hotel Green Leaf', time: '10 Sep', category: 'Orders', iconType: 'order' },
-  { id: '5', title: 'New product added', subtitle: 'Fresh Cauliflower', time: '09 Sep', category: 'System', iconType: 'product' },
-  { id: '6', title: 'System update', subtitle: 'App version 1.2 is live', time: '08 Sep', category: 'System', iconType: 'system' }
-];
 
 const JoinerAppContext = createContext<JoinerAppContextType | undefined>(undefined);
 
 export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const isConnected = isFirebaseConfigured();
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('DASHBOARD');
-  const [hotels, setHotels] = useState<MobileHotel[]>(isConnected ? [] : defaultHotels);
-  const [selectedHotel, setSelectedHotel] = useState<MobileHotel | null>(isConnected ? null : defaultHotels[0]);
-  const [products, setProducts] = useState<MobileProduct[]>(isConnected ? [] : defaultProducts);
-  const [cart, setCart] = useState<CartItem[]>(isConnected ? [] : defaultInitialCart);
-  const [orders, setOrders] = useState<MobileOrder[]>(isConnected ? [] : defaultOrders);
+  const [hotels, setHotels] = useState<MobileHotel[]>([]);
+  const [selectedHotel, setSelectedHotel] = useState<MobileHotel | null>(null);
+  const [products, setProducts] = useState<MobileProduct[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [orders, setOrders] = useState<MobileOrder[]>([]);
   const [lastPlacedOrder, setLastPlacedOrder] = useState<MobileOrder | null>(null);
-  const [selectedOrderForReorder, setSelectedOrderForReorder] = useState<MobileOrder | null>(isConnected ? null : defaultOrders[0]);
-  const [notifications, setNotifications] = useState<MobileNotification[]>(isConnected ? [] : defaultNotifications);
+  const [selectedOrderForReorder, setSelectedOrderForReorder] = useState<MobileOrder | null>(null);
+  const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Subscriptions to live database
+  // User Profile with persistent storage
+  const [userProfile, setUserProfile] = useState<JoinerUserProfile>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('farmerbox_joiner_profile');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return {
+      name: 'Rahul Patil',
+      role: 'Hotel Joiner',
+      zone: 'Kharadi Zone',
+      phone: '9876543210',
+      email: 'rahul.patil@gmail.com',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      totalHotels: 0,
+      totalOrders: 0
+    };
+  });
+
+  // 1. Live Hotels Subscription directly from Firestore 'hotels'
   useEffect(() => {
-    const unsubHotels = subscribeToCollection<MobileHotel>('hotels', isConnected ? [] : defaultHotels, (h) => {
-      setHotels(h);
-      if (h.length > 0) {
-        setSelectedHotel(prev => prev ? (h.find(item => item.id === prev.id) || h[0]) : h[0]);
+    const unsubHotels = subscribeToCollection<any>('hotels', [], (h) => {
+      const mapped: MobileHotel[] = (h || []).map((item: any) => ({
+        id: item.id ?? item.hotelId ?? Date.now(),
+        hotelId: item.hotelId ?? String(item.id ?? ''),
+        name: item.name || 'Unnamed Hotel',
+        zone: item.zone || 'Kharadi',
+        contactPerson: item.contactPerson || item.ownerName || '',
+        phone: item.phone || item.mobile || '',
+        address: item.address || '',
+        gst: item.gst || '',
+        fssai: item.fssai || '',
+        orders: Number(item.orders || 0),
+        status: (item.status === 'Active' || item.status === 'Pending' || item.status === 'Inactive') ? item.status : 'Active',
+        image: item.image || item.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100'
+      }));
+      setHotels(mapped);
+      if (mapped.length > 0) {
+        setSelectedHotel(prev => prev ? (mapped.find(item => String(item.id) === String(prev.id)) || mapped[0]) : mapped[0]);
       } else {
         setSelectedHotel(null);
       }
     });
-    const unsubProducts = subscribeToCollection<any>('products', isConnected ? [] : defaultProducts, (rawProducts) => {
+
+    // 2. Live Products Subscription directly from Firestore 'products'
+    const unsubProducts = subscribeToCollection<any>('products', [], (rawProducts) => {
       if (rawProducts && rawProducts.length > 0) {
         const mapped: MobileProduct[] = rawProducts.map((p: any) => {
-          let img = p.image;
+          let fallbackImg = '/products/fenugreek.jpg';
           const nameLower = (p.name || '').toLowerCase();
-          if (nameLower.includes('methi') || nameLower.includes('fenugreek')) img = '/products/fenugreek.jpg';
-          else if (nameLower.includes('pumpkin') || nameLower.includes('kaddu')) img = '/products/pumpkin.jpg';
-          else if (nameLower.includes('brinjal') || nameLower.includes('eggplant') || nameLower.includes('baingan')) img = '/products/brinjal.jpg';
-          else if (nameLower.includes('mint') || nameLower.includes('pudina')) img = '/products/mint.jpg';
-          else if (nameLower.includes('ginger') || nameLower.includes('adrak')) img = '/products/ginger.jpg';
+          if (nameLower.includes('methi') || nameLower.includes('fenugreek')) fallbackImg = '/products/fenugreek.jpg';
+          else if (nameLower.includes('pumpkin') || nameLower.includes('kaddu')) fallbackImg = '/products/pumpkin.jpg';
+          else if (nameLower.includes('brinjal') || nameLower.includes('eggplant') || nameLower.includes('baingan')) fallbackImg = '/products/brinjal.jpg';
+          else if (nameLower.includes('mint') || nameLower.includes('pudina')) fallbackImg = '/products/mint.jpg';
+          else if (nameLower.includes('ginger') || nameLower.includes('adrak')) fallbackImg = '/products/ginger.jpg';
+          else if (nameLower.includes('tomato')) fallbackImg = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200';
+          else if (nameLower.includes('onion')) fallbackImg = 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8ce?w=200';
+          else if (nameLower.includes('potato')) fallbackImg = 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=200';
 
           return {
-            id: typeof p.id === 'number' ? p.id : Number(p.id) || Date.now(),
-            name: p.name,
+            id: p.id !== undefined ? p.id : Date.now(),
+            name: p.name || 'Unnamed Product',
             category: p.category || 'Vegetables',
             price: Number(p.salePrice ?? p.price ?? 30),
             unit: p.unit ? String(p.unit).toLowerCase() : 'kg',
-            image: p.image || img || '/products/fenugreek.jpg',
+            image: p.imageUrl || p.image || fallbackImg,
             stock: Number(p.stock ?? 100)
           };
         });
-
         setProducts(mapped);
       } else {
-        setProducts(isConnected ? [] : defaultProducts);
+        setProducts([]);
       }
     });
-    const unsubOrders = subscribeToCollection<MobileOrder>('orders', isConnected ? [] : defaultOrders, (o) => {
-      setOrders(o);
+
+    // 3. Live Orders Subscription directly from Firestore 'orders'
+    const unsubOrders = subscribeToCollection<any>('orders', [], (rawOrders) => {
+      const mapped: MobileOrder[] = (rawOrders || []).map((o: any) => ({
+        id: String(o.id || o.orderId || '#FB0000'),
+        orderId: String(o.orderId || o.id || '#FB0000'),
+        hotelId: o.hotelId,
+        hotelName: o.hotelName || 'Partner Hotel',
+        hotelZone: o.hotelZone || o.zone || 'Kharadi',
+        zone: o.zone || o.hotelZone || 'Kharadi',
+        joiner: o.joiner || userProfile.name,
+        joinerId: o.joinerId || 'JN01',
+        date: o.date || 'Today',
+        timeSlot: o.timeSlot || '8 AM - 10 AM',
+        amount: Number(o.totalAmount ?? o.amount ?? 0),
+        subtotal: Number(o.subtotal ?? o.amount ?? 0),
+        totalAmount: Number(o.totalAmount ?? o.amount ?? 0),
+        deliveryCharge: Number(o.deliveryCharge ?? 0),
+        paymentMode: o.paymentMode || o.paymentMethod || 'Online',
+        paymentStatus: o.paymentStatus || 'Pending',
+        status: o.status || o.orderStatus || 'Pending',
+        orderStatus: o.orderStatus || o.status || 'Pending',
+        items: o.items || []
+      }));
+      setOrders(mapped);
     });
-    const unsubNotifs = subscribeToCollection<any>('notifications', isConnected ? [] : defaultNotifications, (rawNotifs) => {
+
+    // 4. Live Notifications Subscription directly from Firestore 'notifications'
+    const unsubNotifs = subscribeToCollection<any>('notifications', [], (rawNotifs) => {
       const mapped: MobileNotification[] = (rawNotifs || []).map((n: any) => ({
         id: String(n.id || Date.now()),
         title: n.title || 'Notification',
@@ -296,7 +270,36 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       unsubOrders();
       unsubNotifs();
     };
-  }, [isConnected]);
+  }, [userProfile.name]);
+
+  // Dynamic Commission calculation from LIVE Orders
+  const commissionBalance = useMemo(() => {
+    let paid = 0;
+    let pending = 0;
+    orders.forEach(o => {
+      const comm = Number((o as any).commission || 100);
+      if (o.status === 'Delivered') {
+        paid += comm;
+      } else {
+        pending += comm;
+      }
+    });
+    return {
+      thisMonth: paid + pending,
+      growth: orders.length > 0 ? 18 : 0,
+      paid,
+      pending
+    };
+  }, [orders]);
+
+  const commissionHistory = useMemo(() => {
+    return orders.map(o => ({
+      date: o.date || 'Today',
+      orderId: o.id,
+      amount: Number((o as any).commission || 100),
+      status: (o.status === 'Delivered' ? 'Paid' : 'Pending') as 'Paid' | 'Pending'
+    }));
+  }, [orders]);
 
   const playNotificationSound = (type: 'notification' | 'commission' | 'pop' = 'notification') => {
     if (!soundEnabled) return;
@@ -309,7 +312,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
         soundEngine.playNotificationChime();
       }
     } catch (e) {
-      console.warn('Audio play error', e);
+      console.warn('Audio play notice', e);
     }
   };
 
@@ -335,102 +338,110 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     playNotificationSound('pop');
   };
 
-  const [commissionBalance, setCommissionBalance] = useState({
-    thisMonth: 4200,
-    growth: 18,
-    paid: 2800,
-    pending: 1400
-  });
-
-  const [commissionHistory, setCommissionHistory] = useState([
-    { date: '12 Sep 2026', orderId: '#FB1001', amount: 100, status: 'Paid' as const },
-    { date: '11 Sep 2026', orderId: '#FB0998', amount: 100, status: 'Paid' as const },
-    { date: '10 Sep 2026', orderId: '#FB0990', amount: 100, status: 'Pending' as const },
-    { date: '09 Sep 2026', orderId: '#FB0985', amount: 100, status: 'Paid' as const },
-    { date: '08 Sep 2026', orderId: '#FB0978', amount: 100, status: 'Paid' as const }
-  ]);
-
-  const [userProfile, setUserProfile] = useState({
-    name: 'Rahul Patil',
-    role: 'Hotel Joiner',
-    zone: 'Kharadi Zone',
-    phone: '9876543210',
-    email: 'rahul.patil@gmail.com',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-    totalHotels: 45,
-    totalOrders: 320
-  });
-
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   const addToCart = (product: MobileProduct) => {
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
+      const existing = prev.find(item => String(item.product.id) === String(product.id));
       if (existing) {
         return prev.map(item =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          String(item.product.id) === String(product.id) ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
       return [...prev, { product, quantity: 1 }];
     });
   };
 
-  const updateCartQty = (productId: number, qty: number) => {
+  const updateCartQty = (productId: number | string, qty: number) => {
     if (qty <= 0) {
       removeFromCart(productId);
       return;
     }
     setCart(prev =>
       prev.map(item =>
-        item.product.id === productId ? { ...item, quantity: qty } : item
+        String(item.product.id) === String(productId) ? { ...item, quantity: qty } : item
       )
     );
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
+  const removeFromCart = (productId: number | string) => {
+    setCart(prev => prev.filter(item => String(item.product.id) !== String(productId)));
   };
 
   const clearCart = () => {
     setCart([]);
   };
 
-  const addHotel = (newHotel: Omit<MobileHotel, 'id'>) => {
-    const hotel: MobileHotel = {
-      ...newHotel,
-      id: Date.now()
+  // Add Hotel: Inserts hotel directly into Cloud Firestore 'hotels' collection
+  const addHotel = (newHotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => {
+    const docId = `HT${Date.now().toString().slice(-6)}`;
+    const hotelToSave: any = {
+      id: docId,
+      hotelId: docId,
+      name: newHotel.name,
+      zone: newHotel.zone || userProfile.zone.replace(' Zone', ''),
+      orders: 0,
+      status: 'Active',
+      image: newHotel.image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=100',
+      contactPerson: newHotel.contactPerson || newHotel.ownerName || 'Manager',
+      phone: newHotel.phone || newHotel.mobile || '',
+      address: newHotel.address || '',
+      gst: newHotel.gst || '',
+      fssai: newHotel.fssai || '',
+      type: newHotel.type || 'Restaurant',
+      assignedJoiner: userProfile.name,
+      joinerId: 'JN01',
+      dailyOrderKg: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
-    saveRecord('hotels', hotel);
-    setHotels(prev => [hotel, ...prev]);
-    setSelectedHotel(hotel);
-    setUserProfile(prev => ({
-      ...prev,
-      totalHotels: prev.totalHotels + 1
-    }));
+
+    saveRecord('hotels', hotelToSave, docId);
+    setHotels(prev => [hotelToSave, ...prev]);
+    setSelectedHotel(hotelToSave);
+    setUserProfile(prev => {
+      const updated = { ...prev, totalHotels: (prev.totalHotels || 0) + 1 };
+      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+
     addNotification({
       title: 'Hotel Partner Added!',
-      subtitle: `${hotel.name} • ${hotel.zone}`,
+      subtitle: `${newHotel.name} • ${hotelToSave.zone}`,
       time: 'Just now',
       category: 'Hotels',
       iconType: 'hotel'
     });
   };
 
+  // Add Order: Inserts order directly into Cloud Firestore 'orders' collection
   const addOrder = (orderData: Partial<MobileOrder>): MobileOrder => {
-    const orderNum = Math.floor(1050 + Math.random() * 9000);
+    const orderNum = Math.floor(1000 + Math.random() * 9000);
     const orderId = `#FB${orderNum}`;
+
+    const mappedItems = cart.map(item => ({
+      id: typeof item.product.id === 'number' ? item.product.id : 1,
+      productName: item.product.name,
+      qty: item.quantity,
+      unit: item.product.unit,
+      price: item.product.price,
+      total: item.quantity * item.product.price
+    }));
+
+    const hotelObj = selectedHotel || (hotels.length > 0 ? hotels[0] : null);
+
     const newOrder: any = {
       id: orderId,
       orderId: orderId,
-      hotelId: selectedHotel ? selectedHotel.id : 'HT01',
-      hotelName: selectedHotel ? selectedHotel.name : 'Selected Hotel',
-      hotelZone: selectedHotel ? selectedHotel.zone : userProfile.zone,
-      zone: selectedHotel ? selectedHotel.zone : userProfile.zone,
+      hotelId: hotelObj ? hotelObj.id : 'HT01',
+      hotelName: orderData.hotelName || (hotelObj ? hotelObj.name : 'Selected Hotel'),
+      hotelZone: orderData.hotelZone || (hotelObj ? hotelObj.zone : userProfile.zone.replace(' Zone', '')),
+      zone: orderData.hotelZone || (hotelObj ? hotelObj.zone : userProfile.zone.replace(' Zone', '')),
       joiner: userProfile.name || 'Rahul Patil',
       joinerId: 'JN01',
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      date: orderData.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      timeSlot: '8 AM - 10 AM',
+      timeSlot: orderData.timeSlot || '8 AM - 10 AM',
       amount: cartTotal,
       totalAmount: cartTotal,
       subtotal: cartTotal,
@@ -438,21 +449,27 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       paymentMode: 'Online',
       paymentMethod: 'Online',
       paymentStatus: 'Pending',
-      driver: 'Suresh Jadhav',
+      driver: 'Assigned upon dispatch',
       deliveryPartnerId: 'DR01',
       status: 'Pending',
       orderStatus: 'Pending',
       commission: 100,
-      items: [...cart],
+      items: mappedItems,
+      rawItems: [...cart],
       ...orderData
     };
+
     saveRecord('orders', newOrder, orderId);
     setOrders(prev => [newOrder, ...prev]);
     setLastPlacedOrder(newOrder);
-    setUserProfile(prev => ({
-      ...prev,
-      totalOrders: prev.totalOrders + 1
-    }));
+    clearCart();
+
+    setUserProfile(prev => {
+      const updated = { ...prev, totalOrders: (prev.totalOrders || 0) + 1 };
+      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+
     addNotification({
       title: 'New Order Placed!',
       subtitle: `${newOrder.hotelName} • ₹${newOrder.amount}`,
@@ -460,23 +477,12 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       category: 'Orders',
       iconType: 'order'
     });
+
     return newOrder;
   };
 
-  // When a NEW joiner registers: Fresh account with NO hotels!
   const registerUser = (data: { name: string; phone: string; email: string; zone: string }) => {
-    setHotels([]);
-    setSelectedHotel(null);
-    setOrders([]);
-    setCart([]);
-    setCommissionBalance({
-      thisMonth: 0,
-      growth: 0,
-      paid: 0,
-      pending: 0
-    });
-    setCommissionHistory([]);
-    setUserProfile({
+    const updated = {
       name: data.name,
       phone: data.phone,
       email: data.email,
@@ -485,39 +491,29 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       totalHotels: 0,
       totalOrders: 0
-    });
+    };
+    setUserProfile(updated);
+    try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
   };
 
   const loginUser = (phone: string) => {
-    if (phone === '9876543210') {
-      // Restore Rahul Patil Demo account
-      setUserProfile({
-        name: 'Rahul Patil',
-        role: 'Hotel Joiner',
-        zone: 'Kharadi Zone',
-        phone: '9876543210',
-        email: 'rahul.patil@gmail.com',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        totalHotels: 45,
-        totalOrders: 320
-      });
-      setHotels(defaultHotels);
-      setSelectedHotel(defaultHotels[0]);
-      setOrders(defaultOrders);
-      setCart(defaultInitialCart);
-      setCommissionBalance({
-        thisMonth: 4200,
-        growth: 18,
-        paid: 2800,
-        pending: 1400
-      });
-    } else {
-      setUserProfile(prev => ({ ...prev, phone }));
-    }
+    setUserProfile(prev => {
+      const updated = {
+        ...prev,
+        phone,
+        name: phone === '9876543210' ? 'Rahul Patil' : `Joiner ${phone.slice(-4)}`
+      };
+      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
   };
 
   const updateUserProfile = (data: Partial<typeof userProfile>) => {
-    setUserProfile(prev => ({ ...prev, ...data }));
+    setUserProfile(prev => {
+      const updated = { ...prev, ...data };
+      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
   };
 
   return (
