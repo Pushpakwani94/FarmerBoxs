@@ -14,7 +14,8 @@ import {
   Settings,
   LogOut,
   Sprout,
-  User
+  User,
+  Smartphone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -25,6 +26,7 @@ export const Sidebar: React.FC = () => {
 
   const menuItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'Mobile App', label: 'Joiner Mobile App', icon: Smartphone, tag: 'Live' },
     { id: 'Zones', label: 'Zones', icon: MapPin },
     { id: 'Hotel Joiners', label: 'Hotel Joiners', icon: Users },
     { id: 'Hotels', label: 'Hotels', icon: Building2 },

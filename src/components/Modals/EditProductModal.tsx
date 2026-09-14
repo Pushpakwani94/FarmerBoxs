@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, CheckCircle2 } from 'lucide-react';
+import { X, Package, CheckCircle2, Upload, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { uploadImageToStorage } from '../../firebase/services/storageService';
 import type { Product } from '../../types';
 
 interface EditProductModalProps {
@@ -38,6 +39,21 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({ product, isO
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
   const [success, setSuccess] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploading(true);
+      const url = await uploadImageToStorage(file, 'products');
+      setImageUrl(url);
+    } catch (err) {
+      console.error('Failed to upload image:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (product) {
@@ -216,13 +232,41 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({ product, isO
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Image URL</label>
-                <input
-                  type="url"
-                  value={imageUrl}
-                  onChange={e => setImageUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono text-[11px]"
-                />
+                <label className="block font-semibold text-slate-700 mb-1">Product Image</label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={imageUrl}
+                      onChange={e => setImageUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono text-[11px]"
+                    />
+                    {imageUrl && (
+                      <img src={imageUrl} alt="Preview" className="w-8 h-8 rounded-md object-cover border border-slate-200" />
+                    )}
+                  </div>
+                  <label className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 cursor-pointer text-slate-600 text-[11px] font-medium transition-colors">
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                        <span>Uploading to Firebase Storage...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Upload from device (Storage)</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={isUploading}
+                      onChange={handleImageFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
 

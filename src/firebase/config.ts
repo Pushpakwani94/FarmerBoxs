@@ -1,5 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { getAuth, signInAnonymously, onAuthStateChanged, type Auth } from 'firebase/auth';
 
 export interface FirebaseConfigParams {
   apiKey: string;
@@ -47,17 +49,32 @@ export const isFirebaseConfigured = (): boolean => {
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
+let auth: Auth | null = null;
 
 if (isFirebaseConfigured()) {
   try {
     app = getApps().length === 0 ? initializeApp(currentFirebaseConfig) : getApps()[0];
     db = getFirestore(app);
+    storage = getStorage(app);
+    auth = getAuth(app);
+
+    // Ensure authenticated session for Firestore security rules
+    if (auth) {
+      onAuthStateChanged(auth, (user) => {
+        if (!user && auth) {
+          signInAnonymously(auth).catch((err) => {
+            console.warn('Anonymous auth note (check if enabled in Firebase Console):', err?.message);
+          });
+        }
+      });
+    }
   } catch (err) {
     console.error('Failed to initialize Firebase app:', err);
   }
 }
 
-export { app, db };
+export { app, db, storage, auth };
 
 export const saveCustomFirebaseConfig = (config: FirebaseConfigParams): boolean => {
   try {

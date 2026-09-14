@@ -50,9 +50,9 @@ export const OrdersPage: React.FC = () => {
 
   const filteredOrders = orders.filter(o => {
     const matchesSearch =
-      o.hotelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.joiner.toLowerCase().includes(searchTerm.toLowerCase());
+      (o.hotelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.joiner || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesZone = selectedZone === 'All Zones' || o.zone === selectedZone;
     const matchesHotel = selectedHotelFilter === 'All Hotels' || o.hotelName === selectedHotelFilter;
     const matchesJoiner = selectedJoinerFilter === 'All Joiners' || o.joiner === selectedJoinerFilter;

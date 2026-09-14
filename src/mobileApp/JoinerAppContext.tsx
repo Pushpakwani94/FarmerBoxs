@@ -260,12 +260,13 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
           else if (nameLower.includes('ginger') || nameLower.includes('adrak')) img = '/products/ginger.jpg';
 
           return {
-            id: p.id,
+            id: typeof p.id === 'number' ? p.id : Number(p.id) || Date.now(),
             name: p.name,
             category: p.category || 'Vegetables',
-            price: Number(p.price ?? p.salePrice ?? 30),
+            price: Number(p.salePrice ?? p.price ?? 30),
             unit: p.unit ? String(p.unit).toLowerCase() : 'kg',
-            image: img || '/products/fenugreek.jpg'
+            image: p.image || img || '/products/fenugreek.jpg',
+            stock: Number(p.stock ?? 100)
           };
         });
 
@@ -416,18 +417,36 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const addOrder = (orderData: Partial<MobileOrder>): MobileOrder => {
-    const newOrder: MobileOrder = {
-      id: `#FB${Math.floor(1050 + Math.random() * 50)}`,
+    const orderNum = Math.floor(1050 + Math.random() * 9000);
+    const orderId = `#FB${orderNum}`;
+    const newOrder: any = {
+      id: orderId,
+      orderId: orderId,
+      hotelId: selectedHotel ? selectedHotel.id : 'HT01',
       hotelName: selectedHotel ? selectedHotel.name : 'Selected Hotel',
       hotelZone: selectedHotel ? selectedHotel.zone : userProfile.zone,
+      zone: selectedHotel ? selectedHotel.zone : userProfile.zone,
+      joiner: userProfile.name || 'Rahul Patil',
+      joinerId: 'JN01',
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timeSlot: '8 AM - 10 AM',
       amount: cartTotal,
+      totalAmount: cartTotal,
+      subtotal: cartTotal,
+      deliveryCharge: 0,
+      paymentMode: 'Online',
+      paymentMethod: 'Online',
+      paymentStatus: 'Pending',
+      driver: 'Suresh Jadhav',
+      deliveryPartnerId: 'DR01',
       status: 'Pending',
+      orderStatus: 'Pending',
+      commission: 100,
       items: [...cart],
       ...orderData
     };
-    saveRecord('orders', newOrder);
+    saveRecord('orders', newOrder, orderId);
     setOrders(prev => [newOrder, ...prev]);
     setLastPlacedOrder(newOrder);
     setUserProfile(prev => ({

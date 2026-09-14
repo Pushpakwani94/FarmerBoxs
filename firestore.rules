@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Authentication helper
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Products catalog: readable by public/mobile/web, writeable by authenticated users
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Inventory items
+    match /inventory/{itemId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Hotels
+    match /hotels/{hotelId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Orders: mobile app places orders, admin updates statuses
+    match /orders/{orderId} {
+      allow read, create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // Zones
+    match /zones/{zoneId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Farmers
+    match /farmers/{farmerId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Joiners
+    match /joiners/{joinerId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Drivers
+    match /drivers/{driverId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Payments
+    match /payments/{paymentId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+  }
+}

@@ -19,6 +19,8 @@ export interface OrderItem {
 
 export interface Order {
   id: string; // e.g., FB1001
+  orderId?: string;
+  hotelId?: string | number;
   date: string;
   time: string;
   hotelName: string;
@@ -27,19 +29,26 @@ export interface Order {
   hotelPhone?: string;
   zone: string;
   joiner: string;
+  joinerId?: string | number;
   amount: number;
+  totalAmount?: number;
   paymentMode: 'Online' | 'COD' | 'Wallet';
+  paymentMethod?: string;
   paymentStatus: 'Paid' | 'Pending' | 'Refunded';
   transactionId?: string;
   driver: string;
   driverPhone?: string;
   deliveryAddress?: string;
+  deliveryPartnerId?: string | number;
   status: OrderStatus;
+  orderStatus?: OrderStatus;
   commission: number;
   items?: OrderItem[];
   subtotal?: number;
   deliveryCharge?: number;
   discount?: number;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Zone {
