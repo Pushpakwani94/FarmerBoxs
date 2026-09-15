@@ -2,7 +2,9 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   getDocs,
+  updateDoc,
   deleteDoc,
   onSnapshot,
   serverTimestamp,
@@ -10,36 +12,16 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../config';
 import type { Driver } from '../../types';
-import { initialDriversList } from '../../data/driversData';
 
 const COLLECTION = 'drivers';
 
-const getLocalDrivers = (): Driver[] => {
-  if (typeof window === 'undefined') return initialDriversList;
-  try {
-    const saved = localStorage.getItem(`farmerbox_${COLLECTION}`);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    console.warn('Local read error', e);
-  }
-  return initialDriversList;
-};
-
-const saveLocalDrivers = (items: Driver[]): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(`farmerbox_${COLLECTION}`, JSON.stringify(items));
-  } catch (e) {
-    console.warn('Local write error', e);
-  }
-};
-
 export const deliveryService = {
-  subscribe(onUpdate: (drivers: Driver[]) => void): Unsubscribe {
-    const cached = getLocalDrivers();
-    if (cached.length > 0) onUpdate(cached);
-
-    if (!isFirebaseConfigured() || !db) return () => {};
+  subscribe(onUpdate: (drivers: Driver[]) => void, onError?: (error: Error) => void): Unsubscribe {
+    if (!isFirebaseConfigured() || !db) {
+      if (onError) onError(new Error('Firebase Firestore is not configured.'));
+      onUpdate([]);
+      return () => {};
+    }
 
     try {
       const colRef = collection(db, COLLECTION);
@@ -47,12 +29,7 @@ export const deliveryService = {
         colRef,
         (snapshot) => {
           if (snapshot.empty) {
-            const local = getLocalDrivers();
-            if (local.length > 0) {
-              onUpdate(local);
-            } else {
-              onUpdate([]);
-            }
+            onUpdate([]);
             return;
           }
 
@@ -63,106 +40,102 @@ export const deliveryService = {
             drivers.push({
               ...data,
               id: idVal,
-              name: data.name || 'Driver',
-              mobile: data.mobile || '+91 98000 00000',
+              name: data.name || 'Unnamed Driver',
+              mobile: data.mobile || data.phone || '9876543210',
+              phone: data.phone || data.mobile || '9876543210',
+              vehicleNo: data.vehicleNo || data.vehicleNumber || 'MH12 AB 9999',
+              vehicleNumber: data.vehicleNumber || data.vehicleNo || 'MH12 AB 9999',
+              vehicleType: data.vehicleType || data.vehicleModel || 'Tata Ace (1.5 Ton)',
               zone: data.zone || 'Kharadi',
-              vehicleNo: data.vehicleNo || 'MH-12-AB-1234',
-              status: data.status || 'Active',
+              assignedOrdersCount: Number(data.assignedOrdersCount ?? 0),
               totalDeliveries: Number(data.totalDeliveries ?? 0),
-              rating: Number(data.rating ?? 4.9),
-              avatar: data.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+              rating: Number(data.rating ?? 5.0),
+              avatar: data.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
+              status: (data.status === 'Inactive' || data.status === 'On Leave') ? data.status : 'Active'
             } as Driver);
           });
 
-          saveLocalDrivers(drivers);
           onUpdate(drivers);
         },
-        (err) => {
-          console.warn('deliveryService snapshot error:', err);
-          onUpdate(getLocalDrivers());
+        (error) => {
+          console.error('deliveryService snapshot error:', error);
+          if (onError) onError(error);
+          onUpdate([]);
         }
       );
-    } catch (err) {
-      console.error('deliveryService error:', err);
-      onUpdate(getLocalDrivers());
+    } catch (err: any) {
+      console.error('deliveryService subscribe exception:', err);
+      if (onError) onError(err);
+      onUpdate([]);
       return () => {};
     }
   },
 
-  async add(driver: Partial<Driver>): Promise<Driver> {
-    const id = driver.id || Date.now();
+  async getAll(): Promise<Driver[]> {
+    if (!isFirebaseConfigured() || !db) return [];
+    try {
+      const colRef = collection(db, COLLECTION);
+      const snap = await getDocs(colRef);
+      return snap.docs.map((d) => ({
+        ...d.data(),
+        id: typeof d.data().id === 'number' ? d.data().id : Number(d.id) || Date.now()
+      })) as Driver[];
+    } catch (e) {
+      console.error('deliveryService.getAll error:', e);
+      return [];
+    }
+  },
+
+  async add(driver: Partial<Driver>): Promise<number> {
+    const id = typeof driver.id === 'number' ? driver.id : Date.now();
     const docId = String(id);
-    const newDriver: Driver = {
+    const newDriver: any = {
+      ...driver,
       id,
-      name: driver.name || 'New Driver',
-      mobile: driver.mobile || '+91 98000 00000',
+      name: driver.name || 'Unnamed Driver',
+      mobile: driver.mobile || (driver as any).phone || '9876543210',
+      vehicleNo: driver.vehicleNo || (driver as any).vehicleNumber || 'MH12 AB 9999',
       zone: driver.zone || 'Kharadi',
-      vehicleNo: driver.vehicleNo || 'MH-12-FB-0001',
-      status: driver.status || 'Active',
       totalDeliveries: Number(driver.totalDeliveries ?? 0),
       rating: Number(driver.rating ?? 5.0),
-      avatar: driver.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
-      email: driver.email || `${(driver.name || 'driver').toLowerCase().replace(/\s+/g, '')}@farmerbox.com`,
-      emergencyContact: driver.emergencyContact || '+91 98000 00000',
-      licenseNumber: driver.licenseNumber || 'MH12 20220012345',
-      vehicleModel: driver.vehicleModel || 'Tata Ace Gold',
-      joiningDate: 'Just now',
-      completedToday: 0,
-      activeDeliveries: 0,
-      onTimeRate: '100%',
-      recentOrders: []
+      avatar: driver.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
+      status: driver.status || 'Active',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
 
-    const local = getLocalDrivers();
-    saveLocalDrivers([newDriver, ...local.filter(d => d.id !== id)]);
-
     if (isFirebaseConfigured() && db) {
-      try {
-        await setDoc(doc(db, COLLECTION, docId), {
-          ...newDriver,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.warn('deliveryService.add error:', err);
+      const docRef = doc(db, COLLECTION, docId);
+      await setDoc(docRef, newDriver, { merge: true });
+      const verifySnap = await getDoc(docRef);
+      if (!verifySnap.exists()) {
+        throw new Error(`Failed to verify driver document ${docId} in Firestore`);
       }
     }
 
-    return newDriver;
+    return id;
   },
 
   async update(id: number | string, data: Partial<Driver>): Promise<void> {
     const docId = String(id);
-    const local = getLocalDrivers();
-    const idx = local.findIndex(d => String(d.id) === docId);
-    if (idx >= 0) {
-      local[idx] = { ...local[idx], ...data };
-      saveLocalDrivers(local);
-    }
-
     if (isFirebaseConfigured() && db) {
-      try {
-        await setDoc(doc(db, COLLECTION, docId), {
-          ...data,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.error('deliveryService.update error:', err);
+      const docRef = doc(db, COLLECTION, docId);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      const verifySnap = await getDoc(docRef);
+      if (!verifySnap.exists()) {
+        throw new Error(`Driver ${docId} not found in Firestore after update`);
       }
     }
   },
 
   async delete(id: number | string): Promise<void> {
     const docId = String(id);
-    const local = getLocalDrivers().filter(d => String(d.id) !== docId);
-    saveLocalDrivers(local);
-
     if (isFirebaseConfigured() && db) {
-      try {
-        await deleteDoc(doc(db, COLLECTION, docId));
-      } catch (err) {
-        console.error('deliveryService.delete error:', err);
-      }
+      const docRef = doc(db, COLLECTION, docId);
+      await deleteDoc(docRef);
     }
   }
 };

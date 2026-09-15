@@ -14,42 +14,17 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../config';
 import type { Product } from '../../types';
-import { initialProductsList } from '../../data/productsData';
 
 const COLLECTION = 'products';
 
-const getLocalProducts = (): Product[] => {
-  if (typeof window === 'undefined') return initialProductsList;
-  try {
-    const saved = localStorage.getItem(`farmerbox_${COLLECTION}`);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    console.warn('Local read error', e);
-  }
-  return initialProductsList;
-};
-
-const saveLocalProducts = (items: Product[]): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(`farmerbox_${COLLECTION}`, JSON.stringify(items));
-  } catch (e) {
-    console.warn('Local write error', e);
-  }
-};
-
 export const productService = {
   /**
-   * Subscribe to real-time product updates using onSnapshot()
+   * Subscribe to real-time product updates exclusively from Cloud Firestore
    */
-  subscribe(onUpdate: (products: Product[]) => void): Unsubscribe {
-    // Return cached immediately
-    const cached = getLocalProducts();
-    if (cached.length > 0) {
-      onUpdate(cached);
-    }
-
+  subscribe(onUpdate: (products: Product[]) => void, onError?: (error: Error) => void): Unsubscribe {
     if (!isFirebaseConfigured() || !db) {
+      if (onError) onError(new Error('Firebase Firestore is not configured.'));
+      onUpdate([]);
       return () => {};
     }
 
@@ -61,12 +36,7 @@ export const productService = {
         q,
         (snapshot) => {
           if (snapshot.empty) {
-            const local = getLocalProducts();
-            if (local.length > 0) {
-              onUpdate(local);
-            } else {
-              onUpdate([]);
-            }
+            onUpdate([]);
             return;
           }
 
@@ -85,138 +55,122 @@ export const productService = {
               stock: Number(data.stock ?? 100),
               minimumStock: Number(data.minimumStock ?? 25),
               status: data.status || 'Active',
-              image: data.image || '/products/fenugreek.jpg'
+              image: data.imageUrl || data.image || '/products/fenugreek.jpg'
             } as Product);
           });
 
-          saveLocalProducts(products);
           onUpdate(products);
         },
         (error) => {
-          console.warn('productService snapshot notice:', error);
-          onUpdate(getLocalProducts());
+          console.error('productService snapshot error:', error);
+          if (onError) onError(error);
+          onUpdate([]);
         }
       );
-    } catch (err) {
-      console.error('productService subscription error:', err);
-      onUpdate(getLocalProducts());
+    } catch (err: any) {
+      console.error('productService subscribe exception:', err);
+      if (onError) onError(err);
+      onUpdate([]);
       return () => {};
     }
   },
 
-  /**
-   * Fetch all products once
-   */
   async getAll(): Promise<Product[]> {
-    if (!isFirebaseConfigured() || !db) return getLocalProducts();
+    if (!isFirebaseConfigured() || !db) return [];
     try {
-      const snapshot = await getDocs(collection(db, COLLECTION));
-      if (snapshot.empty) return getLocalProducts();
-      return snapshot.docs.map(d => ({ ...d.data(), id: Number(d.id) || d.data().id }) as Product);
-    } catch (err) {
-      console.error('productService.getAll error:', err);
-      return getLocalProducts();
+      const colRef = collection(db, COLLECTION);
+      const snap = await getDocs(colRef);
+      return snap.docs.map((d) => ({
+        ...d.data(),
+        id: typeof d.data().id === 'number' ? d.data().id : Number(d.id) || Date.now()
+      })) as Product[];
+    } catch (e) {
+      console.error('productService.getAll error:', e);
+      return [];
     }
   },
 
-  /**
-   * Add a new product to Firestore
-   */
-  async add(productData: Partial<Product>): Promise<Product> {
-    const id = productData.id || Date.now();
+  async getById(id: number | string): Promise<Product | null> {
+    if (!isFirebaseConfigured() || !db) return null;
+    try {
+      const docRef = doc(db, COLLECTION, String(id));
+      const snap = await getDoc(docRef);
+      if (!snap.exists()) return null;
+      return { ...snap.data(), id: typeof snap.data().id === 'number' ? snap.data().id : Number(snap.id) } as Product;
+    } catch (e) {
+      console.error(`productService.getById(${id}) error:`, e);
+      return null;
+    }
+  },
+
+  async add(product: Partial<Product>): Promise<number> {
+    const id = typeof product.id === 'number' ? product.id : Date.now();
     const docId = String(id);
-    const newProduct: Product = {
+    const newProduct: any = {
+      ...product,
       id,
-      name: productData.name || 'New Vegetable',
-      category: productData.category || 'Vegetables',
-      unit: productData.unit || 'KG',
-      purchasePrice: Number(productData.purchasePrice ?? 30),
-      salePrice: Number(productData.salePrice ?? 45),
-      stock: Number(productData.stock ?? 100),
-      minimumStock: Number(productData.minimumStock ?? 25),
-      status: (productData.status as any) || 'Active',
-      addedOn: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      image: productData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200',
-      description: productData.description || 'Fresh farm-sourced produce.',
-      images: productData.images || [productData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200'],
-      stockHistory: [
-        { date: 'Today', type: 'Stock In', qty: `+${productData.stock ?? 100} ${productData.unit || 'KG'}`, ref: `PO-${String(id).slice(-4)}`, user: 'Admin' }
-      ]
+      name: product.name || 'Unnamed Product',
+      category: product.category || 'Vegetables',
+      unit: product.unit || 'KG',
+      purchasePrice: Number(product.purchasePrice ?? 30),
+      salePrice: Number(product.salePrice ?? 45),
+      stock: Number(product.stock ?? 100),
+      minimumStock: Number(product.minimumStock ?? 25),
+      status: product.status || 'Active',
+      image: product.image || '/products/fenugreek.jpg',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
 
-    // 1. Save locally immediately
-    const local = getLocalProducts();
-    saveLocalProducts([newProduct, ...local.filter(p => p.id !== id)]);
-
-    // 2. Persist to Firestore
     if (isFirebaseConfigured() && db) {
-      try {
-        const docRef = doc(db, COLLECTION, docId);
-        await setDoc(docRef, {
-          ...newProduct,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.warn('productService.add Firestore write notice:', err);
+      const docRef = doc(db, COLLECTION, docId);
+      await setDoc(docRef, newProduct, { merge: true });
+      // Verification read from Firestore
+      const verifySnap = await getDoc(docRef);
+      if (!verifySnap.exists()) {
+        throw new Error(`Failed to verify product document ${docId} in Firestore`);
       }
     }
 
-    return newProduct;
+    return id;
   },
 
-  /**
-   * Update an existing product
-   */
   async update(id: number | string, data: Partial<Product>): Promise<void> {
     const docId = String(id);
-
-    // 1. Update local
-    const local = getLocalProducts();
-    const idx = local.findIndex(p => String(p.id) === docId);
-    if (idx >= 0) {
-      local[idx] = { ...local[idx], ...data };
-      saveLocalProducts(local);
-    }
-
-    // 2. Update Firestore
     if (isFirebaseConfigured() && db) {
-      try {
-        const docRef = doc(db, COLLECTION, docId);
-        await updateDoc(docRef, {
-          ...data,
-          updatedAt: serverTimestamp()
-        });
-      } catch (err) {
-        console.warn('productService.update fallback to setDoc:', err);
-        try {
-          const docRef = doc(db, COLLECTION, docId);
-          await setDoc(docRef, { ...data, updatedAt: serverTimestamp() }, { merge: true });
-        } catch (e) {
-          console.error('productService.update error:', e);
-        }
+      const docRef = doc(db, COLLECTION, docId);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      // Verification read
+      const verifySnap = await getDoc(docRef);
+      if (!verifySnap.exists()) {
+        throw new Error(`Product ${docId} not found in Firestore after update`);
       }
     }
   },
 
-  /**
-   * Delete product
-   */
   async delete(id: number | string): Promise<void> {
     const docId = String(id);
-
-    // 1. Update local
-    const local = getLocalProducts().filter(p => String(p.id) !== docId);
-    saveLocalProducts(local);
-
-    // 2. Delete from Firestore
     if (isFirebaseConfigured() && db) {
-      try {
-        const docRef = doc(db, COLLECTION, docId);
-        await deleteDoc(docRef);
-      } catch (err) {
-        console.error('productService.delete error:', err);
-      }
+      const docRef = doc(db, COLLECTION, docId);
+      await deleteDoc(docRef);
     }
+  },
+
+  async updateStock(id: number | string, newStock: number): Promise<void> {
+    await this.update(id, { stock: newStock });
+  },
+
+  async updatePrice(id: number | string, salePrice: number, purchasePrice?: number): Promise<void> {
+    const updates: Partial<Product> = { salePrice };
+    if (purchasePrice !== undefined) updates.purchasePrice = purchasePrice;
+    await this.update(id, updates);
+  },
+
+  async toggleStatus(id: number | string, currentStatus: string): Promise<void> {
+    const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
+    await this.update(id, { status: newStatus as any });
   }
 };

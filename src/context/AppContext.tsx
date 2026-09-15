@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import type {
   Order,
   Zone,
@@ -11,23 +12,13 @@ import type {
   OrderStatus
 } from '../types';
 import {
-  initialOrders,
-  initialZones,
-  initialJoiners,
-  initialHotels,
-  initialPayments,
-  initialNotifications
-} from '../mockData';
-import { initialDriversList } from '../data/driversData';
-import { initialProductsList } from '../data/productsData';
-import {
   subscribeToCollection,
   saveRecord,
   deleteRecord,
   seedFirestoreDatabase,
   clearLocalDummyCache
 } from '../firebase/dbService';
-import { isFirebaseConfigured } from '../firebase/config';
+import { db, isFirebaseConfigured } from '../firebase/config';
 
 export interface AdminProfile {
   name: string;
@@ -55,11 +46,14 @@ interface AppContextType {
   payments: PaymentTransaction[];
   notifications: NotificationItem[];
   isDatabaseConnected: boolean;
+  firestoreError: string | null;
   seedDatabaseToFirebase: () => Promise<any>;
 
+  // Navigation
   activeTab: string;
   setActiveTab: (tab: string) => void;
 
+  // Selected State
   selectedOrder: Order | null;
   setSelectedOrder: (order: Order | null) => void;
   selectedZone: Zone | null;
@@ -73,7 +67,7 @@ interface AppContextType {
   selectedDriver: Driver | null;
   setSelectedDriver: (driver: Driver | null) => void;
 
-  // Modals visibility
+  // Modals
   isAddHotelOpen: boolean;
   setIsAddHotelOpen: (open: boolean) => void;
   isAddJoinerOpen: boolean;
@@ -132,7 +126,14 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const isConnected = isFirebaseConfigured();
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
+  // Clean all legacy local caches from previous sessions
+  useEffect(() => {
+    clearLocalDummyCache();
+  }, []);
+
+  // Primary application state — starts completely empty and loads ONLY from Cloud Firestore
   const [orders, setOrders] = useState<Order[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [joiners, setJoiners] = useState<Joiner[]>([]);
@@ -142,31 +143,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // Subscriptions to Cloud Firestore
+  // Subscriptions strictly to Cloud Firestore
   useEffect(() => {
-    const unsubOrders = subscribeToCollection<Order>('orders', isConnected ? [] : initialOrders, setOrders);
-    const unsubZones = subscribeToCollection<Zone>('zones', isConnected ? [] : initialZones, (z) => {
+    const handleErr = (err: Error) => {
+      setFirestoreError(err.message || 'Firestore connection error');
+    };
+
+    const unsubOrders = subscribeToCollection<Order>('orders', setOrders, handleErr);
+
+    const unsubZones = subscribeToCollection<Zone>('zones', (z) => {
       setZones(z);
       setSelectedZone(prev => prev ? (z.find(item => String(item.id) === String(prev.id)) || z[0] || null) : (z[0] || null));
-    });
-    const unsubJoiners = subscribeToCollection<Joiner>('joiners', isConnected ? [] : initialJoiners, (j) => {
+    }, handleErr);
+
+    const unsubJoiners = subscribeToCollection<Joiner>('joiners', (j) => {
       setJoiners(j);
       setSelectedJoiner(prev => prev ? (j.find(item => String(item.id) === String(prev.id)) || j[0] || null) : (j[0] || null));
-    });
-    const unsubDrivers = subscribeToCollection<Driver>('drivers', isConnected ? [] : initialDriversList, (d) => {
+    }, handleErr);
+
+    const unsubDrivers = subscribeToCollection<Driver>('drivers', (d) => {
       setDrivers(d);
       setSelectedDriver(prev => prev ? (d.find(item => String(item.id) === String(prev.id)) || d[0] || null) : (d[0] || null));
-    });
-    const unsubHotels = subscribeToCollection<Hotel>('hotels', isConnected ? [] : initialHotels, (h) => {
+    }, handleErr);
+
+    const unsubHotels = subscribeToCollection<Hotel>('hotels', (h) => {
       setHotels(h);
       setSelectedHotel(prev => prev ? (h.find(item => String(item.id) === String(prev.id)) || h[0] || null) : (h[0] || null));
-    });
-    const unsubProducts = subscribeToCollection<Product>('products', isConnected ? [] : initialProductsList, (p) => {
+    }, handleErr);
+
+    const unsubProducts = subscribeToCollection<Product>('products', (p) => {
       setProducts(p);
       setSelectedProduct(prev => prev ? (p.find(item => String(item.id) === String(prev.id)) || p[0] || null) : (p[0] || null));
-    });
-    const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', isConnected ? [] : initialPayments, setPayments);
-    const unsubNotifs = subscribeToCollection<any>('notifications', isConnected ? [] : initialNotifications, (rawNotifs) => {
+    }, handleErr);
+
+    const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', setPayments, handleErr);
+
+    const unsubNotifs = subscribeToCollection<any>('notifications', (rawNotifs) => {
       const normalized: NotificationItem[] = (rawNotifs || []).map((n: any) => ({
         id: n.id !== undefined && n.id !== null ? n.id : Date.now(),
         title: n.title || 'Notification',
@@ -181,7 +193,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         iconType: n.iconType || 'system'
       }));
       setNotifications(normalized);
-    });
+    }, handleErr);
 
     return () => {
       unsubOrders();
@@ -193,16 +205,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unsubPayments();
       unsubNotifs();
     };
-  }, [isConnected]);
+  }, []);
 
   const [activeTab, setActiveTab] = useState<string>('Dashboard');
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedZone, setSelectedZone] = useState<Zone | null>(isConnected ? null : initialZones[0]);
-  const [selectedJoiner, setSelectedJoiner] = useState<Joiner | null>(isConnected ? null : initialJoiners[0]);
-  const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(isConnected ? null : initialHotels[0]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(isConnected ? null : initialProductsList[0]);
-  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(isConnected ? null : initialDriversList[0]);
+  const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [selectedJoiner, setSelectedJoiner] = useState<Joiner | null>(null);
+  const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
 
   const [isAddHotelOpen, setIsAddHotelOpen] = useState(false);
   const [isAddJoinerOpen, setIsAddJoinerOpen] = useState(false);
@@ -213,57 +225,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isOrderDetailModalOpen, setIsOrderDetailModalOpen] = useState(false);
   const [isAdminProfileOpen, setIsAdminProfileOpen] = useState(false);
 
-  const [adminProfile, setAdminProfile] = useState<AdminProfile>(() => {
-    try {
-      const saved = localStorage.getItem('farmerbox_admin_profile');
-      if (saved) {
-        return {
-          name: 'Pushpak Wani',
-          role: 'Super Admin',
-          email: 'admin@farmerbox.com',
-          phone: '+91 98765 43210',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-          zone: 'All Zones (HQ)',
-          location: 'Pune, Maharashtra',
-          department: 'Operations & Management',
-          joinedDate: 'Jan 2025',
-          bio: 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
-          emergencyContact: '+91 98220 11223 (Operations Manager)',
-          timezone: '(GMT+05:30) Asia/Kolkata',
-          language: 'English (India)',
-          ...JSON.parse(saved)
-        };
-      }
-    } catch (e) {
-      console.warn('Failed to parse admin profile', e);
-    }
-    return {
-      name: 'Pushpak Wani',
-      role: 'Super Admin',
-      email: 'admin@farmerbox.com',
-      phone: '+91 98765 43210',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
-      zone: 'All Zones (HQ)',
-      location: 'Pune, Maharashtra',
-      department: 'Operations & Management',
-      joinedDate: 'Jan 2025',
-      bio: 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
-      emergencyContact: '+91 98220 11223 (Operations Manager)',
-      timezone: '(GMT+05:30) Asia/Kolkata',
-      language: 'English (India)'
-    };
+  // Admin Profile stored in Firestore 'settings/admin_profile'
+  const [adminProfile, setAdminProfile] = useState<AdminProfile>({
+    name: 'Pushpak Wani',
+    role: 'Super Admin',
+    email: 'admin@farmerbox.com',
+    phone: '+91 98765 43210',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
+    zone: 'All Zones (HQ)',
+    location: 'Pune, Maharashtra',
+    department: 'Operations & Management',
+    joinedDate: 'Jan 2025',
+    bio: 'Overseeing daily vegetable supply chain operations, hotel partner onboardings, and automated driver dispatch across Pune metropolitan area.',
+    emergencyContact: '+91 98220 11223 (Operations Manager)',
+    timezone: '(GMT+05:30) Asia/Kolkata',
+    language: 'English (India)'
   });
 
-  const updateAdminProfile = (data: Partial<AdminProfile>) => {
-    setAdminProfile(prev => {
-      const updated = { ...prev, ...data };
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !db) return;
+    try {
+      const unsub = onSnapshot(doc(db, 'settings', 'admin_profile'), (snap) => {
+        if (snap.exists()) {
+          setAdminProfile(prev => ({ ...prev, ...(snap.data() as AdminProfile) }));
+        }
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn('Admin profile subscription notice:', e);
+    }
+  }, []);
+
+  const updateAdminProfile = async (data: Partial<AdminProfile>) => {
+    const updated = { ...adminProfile, ...data };
+    setAdminProfile(updated);
+    if (isFirebaseConfigured() && db) {
       try {
-        localStorage.setItem('farmerbox_admin_profile', JSON.stringify(updated));
-      } catch (e) {
-        console.warn('Failed to persist admin profile', e);
+        await setDoc(doc(db, 'settings', 'admin_profile'), updated, { merge: true });
+      } catch (e: any) {
+        console.error('Failed to update admin profile in Firestore:', e);
+        setFirestoreError(e.message || 'Failed to save admin profile to Firestore');
       }
-      return updated;
-    });
+    }
   };
 
   const markNotificationsAsRead = () => {
@@ -290,15 +293,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotifications([]);
   };
 
-  const updateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     const existing = orders.find(o => String(o.id) === String(orderId));
     if (existing) {
       const updated = {
         ...existing,
         status: newStatus,
+        orderStatus: newStatus,
         commission: newStatus === 'Delivered' ? 100 : existing.commission
       };
-      saveRecord('orders', updated);
+      await saveRecord('orders', updated);
       addNotification({
         title: `Order #${orderId} ${newStatus}`,
         message: `Order status changed to ${newStatus} for ${existing.hotelName}`,
@@ -316,6 +320,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           return {
             ...ord,
             status: newStatus,
+            orderStatus: newStatus,
             commission: newStatus === 'Delivered' ? 100 : ord.commission
           };
         }
@@ -324,7 +329,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  const addZone = (name: string, area?: string, status?: 'Active' | 'Inactive') => {
+  const addZone = async (name: string, area?: string, status?: 'Active' | 'Inactive') => {
     const newZone: Zone = {
       id: Date.now(),
       name,
@@ -336,31 +341,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: status || 'Active',
       color: '#38bdf8'
     };
-    saveRecord('zones', newZone);
+    await saveRecord('zones', newZone);
     setZones(prev => [newZone, ...prev]);
   };
 
-  const updateZone = (zoneId: number, data: Partial<Zone>) => {
+  const updateZone = async (zoneId: number, data: Partial<Zone>) => {
     const existing = zones.find(z => z.id === zoneId);
     if (existing) {
       const updated = { ...existing, ...data };
-      saveRecord('zones', updated);
+      await saveRecord('zones', updated);
     }
     setZones(prev => prev.map(z => z.id === zoneId ? { ...z, ...data } : z));
     if (selectedZone && selectedZone.id === zoneId) {
-      setSelectedZone({ ...selectedZone, ...data });
+      setSelectedZone(prev => (prev ? { ...prev, ...data } : null));
     }
   };
 
-  const deleteZone = (zoneId: number) => {
-    deleteRecord('zones', zoneId);
+  const deleteZone = async (zoneId: number) => {
+    await deleteRecord('zones', zoneId);
     setZones(prev => prev.filter(z => z.id !== zoneId));
     if (selectedZone && selectedZone.id === zoneId) {
       setSelectedZone(null);
     }
   };
 
-  const addJoiner = (name: string, mobile: string, zone: string, email?: string, status?: 'Active' | 'Inactive') => {
+  const addJoiner = async (name: string, mobile: string, zone: string, email?: string, status?: 'Active' | 'Inactive') => {
     const newJoiner: Joiner = {
       id: Date.now(),
       joinerCode: `JN0${joiners.length + 1}`,
@@ -377,31 +382,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
       joinedDate: 'Just now'
     };
-    saveRecord('joiners', newJoiner);
+    await saveRecord('joiners', newJoiner);
     setJoiners(prev => [newJoiner, ...prev]);
   };
 
-  const updateJoiner = (joinerId: number, data: Partial<Joiner>) => {
+  const updateJoiner = async (joinerId: number, data: Partial<Joiner>) => {
     const existing = joiners.find(j => j.id === joinerId);
     if (existing) {
       const updated = { ...existing, ...data };
-      saveRecord('joiners', updated);
+      await saveRecord('joiners', updated);
     }
     setJoiners(prev => prev.map(j => j.id === joinerId ? { ...j, ...data } : j));
     if (selectedJoiner && selectedJoiner.id === joinerId) {
-      setSelectedJoiner({ ...selectedJoiner, ...data });
+      setSelectedJoiner(prev => (prev ? { ...prev, ...data } : null));
     }
   };
 
-  const deleteJoiner = (joinerId: number) => {
-    deleteRecord('joiners', joinerId);
+  const deleteJoiner = async (joinerId: number) => {
+    await deleteRecord('joiners', joinerId);
     setJoiners(prev => prev.filter(j => j.id !== joinerId));
     if (selectedJoiner && selectedJoiner.id === joinerId) {
       setSelectedJoiner(null);
     }
   };
 
-  const addHotel = (
+  const addHotel = async (
     hotelOrName: string | any,
     ownerName?: string,
     mobile?: string,
@@ -449,7 +454,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: 'Active',
       image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=300'
     };
-    saveRecord('hotels', newHotel);
+    await saveRecord('hotels', newHotel);
     setHotels(prev => [newHotel, ...prev]);
     addNotification({
       title: 'New Hotel Registered',
@@ -463,11 +468,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const updateHotel = (hotelId: number, data: Partial<Hotel>) => {
+  const updateHotel = async (hotelId: number, data: Partial<Hotel>) => {
     const existing = hotels.find(h => h.id === hotelId);
     if (existing) {
       const updated = { ...existing, ...data };
-      saveRecord('hotels', updated);
+      await saveRecord('hotels', updated);
     }
     setHotels(prev => prev.map(h => (h.id === hotelId ? { ...h, ...data } : h)));
     if (selectedHotel && selectedHotel.id === hotelId) {
@@ -475,15 +480,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const deleteHotel = (hotelId: number) => {
-    deleteRecord('hotels', hotelId);
+  const deleteHotel = async (hotelId: number) => {
+    await deleteRecord('hotels', hotelId);
     setHotels(prev => prev.filter(h => h.id !== hotelId));
     if (selectedHotel && selectedHotel.id === hotelId) {
       setSelectedHotel(null);
     }
   };
 
-  const addDriver = (driverData: Partial<Driver>) => {
+  const addDriver = async (driverData: Partial<Driver>) => {
     const newDriver: Driver = {
       id: Date.now(),
       name: driverData.name || 'New Driver',
@@ -504,15 +509,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       onTimeRate: '100%',
       recentOrders: []
     };
-    saveRecord('drivers', newDriver);
+    await saveRecord('drivers', newDriver);
     setDrivers(prev => [newDriver, ...prev]);
   };
 
-  const updateDriver = (driverId: number, data: Partial<Driver>) => {
+  const updateDriver = async (driverId: number, data: Partial<Driver>) => {
     const existing = drivers.find(d => d.id === driverId);
     if (existing) {
       const updated = { ...existing, ...data };
-      saveRecord('drivers', updated);
+      await saveRecord('drivers', updated);
     }
     setDrivers(prev => prev.map(d => (d.id === driverId ? { ...d, ...data } : d)));
     if (selectedDriver && selectedDriver.id === driverId) {
@@ -520,15 +525,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const deleteDriver = (driverId: number) => {
-    deleteRecord('drivers', driverId);
+  const deleteDriver = async (driverId: number) => {
+    await deleteRecord('drivers', driverId);
     setDrivers(prev => prev.filter(d => d.id !== driverId));
     if (selectedDriver && selectedDriver.id === driverId) {
       setSelectedDriver(null);
     }
   };
 
-  const addProduct = (prodData: Partial<Product>) => {
+  const addProduct = async (prodData: Partial<Product>) => {
     const newProduct: Product = {
       id: Date.now(),
       name: prodData.name || 'New Vegetable',
@@ -540,23 +545,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       minimumStock: prodData.minimumStock ?? 25,
       status: (prodData.status as any) || 'Active',
       addedOn: 'Just now',
-      image: prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200',
+      image: prodData.imageUrl || prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200',
       description: prodData.description || 'Fresh farm-sourced produce.',
       images: prodData.images || [prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200'],
       stockHistory: [
         { date: 'Today', type: 'Stock In', qty: `+${prodData.stock ?? 100} ${prodData.unit || 'KG'}`, ref: `PO-${Date.now().toString().slice(-4)}`, user: 'Admin' }
       ]
     };
-    saveRecord('products', newProduct);
+    await saveRecord('products', newProduct);
     setProducts(prev => [newProduct, ...prev]);
     setSelectedProduct(newProduct);
   };
 
-  const updateProduct = (productId: number, data: Partial<Product>) => {
+  const updateProduct = async (productId: number, data: Partial<Product>) => {
     const existing = products.find(p => p.id === productId);
     if (existing) {
       const updated = { ...existing, ...data };
-      saveRecord('products', updated);
+      await saveRecord('products', updated);
     }
     setProducts(prev => prev.map(p => (p.id === productId ? { ...p, ...data } : p)));
     if (selectedProduct && selectedProduct.id === productId) {
@@ -564,15 +569,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const deleteProduct = (productId: number) => {
-    deleteRecord('products', productId);
+  const deleteProduct = async (productId: number) => {
+    await deleteRecord('products', productId);
     setProducts(prev => prev.filter(p => p.id !== productId));
     if (selectedProduct && selectedProduct.id === productId) {
       setSelectedProduct(products.find(p => p.id !== productId) || null);
     }
   };
 
-  const addOrder = (orderData: Partial<Order>) => {
+  const addOrder = async (orderData: Partial<Order>) => {
     const newOrder: Order = {
       id: orderData.id || `FB${Math.floor(1000 + Math.random() * 9000)}`,
       date: orderData.date || new Date().toISOString().split('T')[0],
@@ -590,7 +595,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       items: orderData.items || [],
       ...orderData
     };
-    saveRecord('orders', newOrder);
+    await saveRecord('orders', newOrder);
     setOrders(prev => [newOrder, ...prev]);
     addNotification({
       title: 'New Order Received',
@@ -604,15 +609,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const deleteOrder = (orderId: string) => {
-    deleteRecord('orders', orderId);
+  const deleteOrder = async (orderId: string) => {
+    await deleteRecord('orders', orderId);
     setOrders(prev => prev.filter(o => String(o.id) !== String(orderId)));
     if (selectedOrder && String(selectedOrder.id) === String(orderId)) {
       setSelectedOrder(null);
     }
   };
 
-  const addPayment = (paymentData: Partial<PaymentTransaction>) => {
+  const addPayment = async (paymentData: Partial<PaymentTransaction>) => {
     const newPayment: PaymentTransaction = {
       id: paymentData.id || Date.now(),
       dateTime: paymentData.dateTime || new Date().toLocaleString(),
@@ -625,11 +630,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       paymentMode: paymentData.paymentMode || 'Online',
       ...paymentData
     };
-    saveRecord('payments', newPayment);
+    await saveRecord('payments', newPayment);
     setPayments(prev => [newPayment, ...prev]);
   };
 
-  const addNotification = (notifData: Partial<NotificationItem>) => {
+  const addNotification = async (notifData: Partial<NotificationItem>) => {
     const docId = notifData.id !== undefined && notifData.id !== null ? String(notifData.id) : String(Date.now());
     const nowStr = new Date().toLocaleDateString('en-IN', {
       day: '2-digit',
@@ -652,12 +657,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       iconType: notifData.iconType || 'system',
       ...notifData
     };
-    saveRecord('notifications', newNotif, docId);
+    await saveRecord('notifications', newNotif, docId);
     setNotifications(prev => [newNotif, ...prev.filter(n => String(n.id) !== docId)]);
   };
 
-  const deleteNotification = (id: number | string) => {
-    deleteRecord('notifications', id);
+  const deleteNotification = async (id: number | string) => {
+    await deleteRecord('notifications', id);
     setNotifications(prev => prev.filter(n => String(n.id) !== String(id)));
   };
 
@@ -672,7 +677,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         products,
         payments,
         notifications,
-        isDatabaseConnected: isFirebaseConfigured(),
+        isDatabaseConnected: isConnected,
+        firestoreError,
         seedDatabaseToFirebase: seedFirestoreDatabase,
         activeTab,
         setActiveTab,

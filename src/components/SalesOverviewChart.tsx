@@ -1,25 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApp } from '../context/AppContext';
-import { monthlySalesChartData } from '../mockData';
 
 export const SalesOverviewChart: React.FC = () => {
-  const { orders, isDatabaseConnected } = useApp();
+  const { orders } = useApp();
   const [period, setPeriod] = useState<'This Month' | 'Last Month'>('This Month');
 
   const currentData = useMemo(() => {
-    if (!isDatabaseConnected) {
-      return period === 'This Month' ? monthlySalesChartData : [
-        { date: '1 Aug', sales: 180000 },
-        { date: '5 Aug', sales: 210000 },
-        { date: '10 Aug', sales: 290000 },
-        { date: '15 Aug', sales: 310000 },
-        { date: '20 Aug', sales: 420000 },
-        { date: '25 Aug', sales: 510000 },
-        { date: '31 Aug', sales: 620000 }
-      ];
-    }
-
     if (orders.length === 0) {
       return [
         { date: '1st', sales: 0 },
@@ -30,13 +17,13 @@ export const SalesOverviewChart: React.FC = () => {
     }
 
     const map = new Map<string, number>();
-    orders.forEach(o => {
+    orders.forEach((o: any) => {
       const d = o.date || 'Today';
       map.set(d, (map.get(d) || 0) + (Number(o.amount) || 0));
     });
 
     return Array.from(map.entries()).map(([date, sales]) => ({ date, sales }));
-  }, [orders, isDatabaseConnected, period]);
+  }, [orders]);
 
   const maxSales = Math.max(10000, ...currentData.map(d => d.sales));
 

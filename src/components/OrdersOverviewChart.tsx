@@ -1,27 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApp } from '../context/AppContext';
-import { weeklyOrdersChartData } from '../mockData';
 
 export const OrdersOverviewChart: React.FC = () => {
-  const { orders, isDatabaseConnected } = useApp();
+  const { orders } = useApp();
   const [period, setPeriod] = useState<'This Week' | 'Last Week'>('This Week');
 
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const currentData = useMemo(() => {
-    if (!isDatabaseConnected) {
-      return period === 'This Week' ? weeklyOrdersChartData : [
-        { day: 'Mon', Delivered: 210, Pending: 140, Cancelled: 30 },
-        { day: 'Tue', Delivered: 195, Pending: 110, Cancelled: 20 },
-        { day: 'Wed', Delivered: 230, Pending: 155, Cancelled: 45 },
-        { day: 'Thu', Delivered: 180, Pending: 90, Cancelled: 15 },
-        { day: 'Fri', Delivered: 240, Pending: 130, Cancelled: 35 },
-        { day: 'Sat', Delivered: 190, Pending: 100, Cancelled: 25 },
-        { day: 'Sun', Delivered: 215, Pending: 120, Cancelled: 20 }
-      ];
-    }
-
     return days.map(day => {
       const dayOrders = orders.filter(o => {
         if (!o.date) return false;
@@ -44,7 +31,7 @@ export const OrdersOverviewChart: React.FC = () => {
         Cancelled: dayOrders.filter(o => o.status === 'Cancelled').length
       };
     });
-  }, [orders, isDatabaseConnected, period]);
+  }, [orders, period]);
 
   const maxVal = Math.max(10, ...currentData.map(d => Math.max(d.Delivered, d.Pending, d.Cancelled)));
 

@@ -2,7 +2,9 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   getDocs,
+  updateDoc,
   deleteDoc,
   onSnapshot,
   serverTimestamp,
@@ -10,36 +12,16 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../config';
 import type { Joiner } from '../../types';
-import { initialJoiners } from '../../mockData';
 
 const COLLECTION = 'joiners';
 
-const getLocalJoiners = (): Joiner[] => {
-  if (typeof window === 'undefined') return initialJoiners;
-  try {
-    const saved = localStorage.getItem(`farmerbox_${COLLECTION}`);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {
-    console.warn('Local read error', e);
-  }
-  return initialJoiners;
-};
-
-const saveLocalJoiners = (items: Joiner[]): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(`farmerbox_${COLLECTION}`, JSON.stringify(items));
-  } catch (e) {
-    console.warn('Local write error', e);
-  }
-};
-
 export const hotelJoinerService = {
-  subscribe(onUpdate: (joiners: Joiner[]) => void): Unsubscribe {
-    const cached = getLocalJoiners();
-    if (cached.length > 0) onUpdate(cached);
-
-    if (!isFirebaseConfigured() || !db) return () => {};
+  subscribe(onUpdate: (joiners: Joiner[]) => void, onError?: (error: Error) => void): Unsubscribe {
+    if (!isFirebaseConfigured() || !db) {
+      if (onError) onError(new Error('Firebase Firestore is not configured.'));
+      onUpdate([]);
+      return () => {};
+    }
 
     try {
       const colRef = collection(db, COLLECTION);
@@ -47,12 +29,7 @@ export const hotelJoinerService = {
         colRef,
         (snapshot) => {
           if (snapshot.empty) {
-            const local = getLocalJoiners();
-            if (local.length > 0) {
-              onUpdate(local);
-            } else {
-              onUpdate([]);
-            }
+            onUpdate([]);
             return;
           }
 
@@ -63,107 +40,112 @@ export const hotelJoinerService = {
             joiners.push({
               ...data,
               id: idVal,
-              joinerCode: data.joinerCode || `JN0${idVal}`,
-              name: data.name || 'Joiner',
-              mobile: data.mobile || '+91 98000 00000',
-              email: data.email || 'joiner@example.com',
+              joinerCode: data.joinerCode || `JN0${idVal.toString().slice(-2)}`,
+              name: data.name || 'Unnamed Joiner',
+              mobile: data.mobile || data.phone || '9876543210',
+              phone: data.phone || data.mobile || '9876543210',
+              email: data.email || `${(data.name || 'joiner').toLowerCase().replace(/\s+/g, '')}@farmerbox.in`,
               zone: data.zone || 'Kharadi',
-              totalHotels: Number(data.totalHotels ?? 0),
+              totalHotels: Number(data.totalHotels ?? data.hotelsCount ?? 0),
+              hotelsCount: Number(data.hotelsCount ?? data.totalHotels ?? 0),
               totalOrders: Number(data.totalOrders ?? 0),
-              totalEarnings: Number(data.totalEarnings ?? 0),
+              activeOrdersToday: Number(data.activeOrdersToday ?? 0),
+              totalEarnings: Number(data.totalEarnings ?? data.commissionEarned ?? 0),
+              commissionEarned: Number(data.commissionEarned ?? data.totalEarnings ?? 0),
               paidAmount: Number(data.paidAmount ?? 0),
               pendingAmount: Number(data.pendingAmount ?? 0),
-              status: data.status || 'Active',
-              avatar: data.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-              joinedDate: data.joinedDate || 'Recent'
+              status: data.status === 'Inactive' ? 'Inactive' : 'Active',
+              avatar: data.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+              joinedDate: data.joinedDate || 'Just now'
             } as Joiner);
           });
 
-          saveLocalJoiners(joiners);
           onUpdate(joiners);
         },
-        (err) => {
-          console.warn('hotelJoinerService snapshot error:', err);
-          onUpdate(getLocalJoiners());
+        (error) => {
+          console.error('hotelJoinerService snapshot error:', error);
+          if (onError) onError(error);
+          onUpdate([]);
         }
       );
-    } catch (err) {
-      console.error('hotelJoinerService error:', err);
-      onUpdate(getLocalJoiners());
+    } catch (err: any) {
+      console.error('hotelJoinerService subscribe exception:', err);
+      if (onError) onError(err);
+      onUpdate([]);
       return () => {};
     }
   },
 
-  async add(joiner: Partial<Joiner>): Promise<Joiner> {
-    const id = joiner.id || Date.now();
+  async getAll(): Promise<Joiner[]> {
+    if (!isFirebaseConfigured() || !db) return [];
+    try {
+      const colRef = collection(db, COLLECTION);
+      const snap = await getDocs(colRef);
+      return snap.docs.map((d) => ({
+        ...d.data(),
+        id: typeof d.data().id === 'number' ? d.data().id : Number(d.id) || Date.now()
+      })) as Joiner[];
+    } catch (e) {
+      console.error('hotelJoinerService.getAll error:', e);
+      return [];
+    }
+  },
+
+  async add(joiner: Partial<Joiner>): Promise<number> {
+    const id = typeof joiner.id === 'number' ? joiner.id : Date.now();
     const docId = String(id);
-    const newJoiner: Joiner = {
+    const newJoiner: any = {
+      ...joiner,
       id,
-      joinerCode: joiner.joinerCode || `JN0${id}`,
-      name: joiner.name || 'New Joiner',
-      mobile: joiner.mobile || '+91 98000 00000',
-      email: joiner.email || `${(joiner.name || 'joiner').toLowerCase().replace(/\s+/g, '')}@example.com`,
+      joinerCode: joiner.joinerCode || `JN0${id.toString().slice(-2)}`,
+      name: joiner.name || 'Unnamed Joiner',
+      mobile: joiner.mobile || (joiner as any).phone || '9876543210',
+      email: joiner.email || '',
       zone: joiner.zone || 'Kharadi',
-      totalHotels: Number(joiner.totalHotels ?? 0),
+      totalHotels: Number(joiner.totalHotels ?? (joiner as any).hotelsCount ?? 0),
       totalOrders: Number(joiner.totalOrders ?? 0),
-      totalEarnings: Number(joiner.totalEarnings ?? 0),
+      totalEarnings: Number(joiner.totalEarnings ?? (joiner as any).commissionEarned ?? 0),
       paidAmount: Number(joiner.paidAmount ?? 0),
       pendingAmount: Number(joiner.pendingAmount ?? 0),
       status: joiner.status || 'Active',
-      avatar: joiner.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-      joinedDate: 'Just now'
+      avatar: joiner.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      joinedDate: joiner.joinedDate || 'Just now',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
 
-    const local = getLocalJoiners();
-    saveLocalJoiners([newJoiner, ...local.filter(j => j.id !== id)]);
-
     if (isFirebaseConfigured() && db) {
-      try {
-        await setDoc(doc(db, COLLECTION, docId), {
-          ...newJoiner,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.warn('hotelJoinerService.add error:', err);
+      const docRef = doc(db, COLLECTION, docId);
+      await setDoc(docRef, newJoiner, { merge: true });
+      const verifySnap = await getDoc(docRef);
+      if (!verifySnap.exists()) {
+        throw new Error(`Failed to verify joiner document ${docId} in Firestore`);
       }
     }
 
-    return newJoiner;
+    return id;
   },
 
   async update(id: number | string, data: Partial<Joiner>): Promise<void> {
     const docId = String(id);
-    const local = getLocalJoiners();
-    const idx = local.findIndex(j => String(j.id) === docId);
-    if (idx >= 0) {
-      local[idx] = { ...local[idx], ...data };
-      saveLocalJoiners(local);
-    }
-
     if (isFirebaseConfigured() && db) {
-      try {
-        await setDoc(doc(db, COLLECTION, docId), {
-          ...data,
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-      } catch (err) {
-        console.error('hotelJoinerService.update error:', err);
+      const docRef = doc(db, COLLECTION, docId);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      const verifySnap = await getDoc(docRef);
+      if (!verifySnap.exists()) {
+        throw new Error(`Joiner ${docId} not found in Firestore after update`);
       }
     }
   },
 
   async delete(id: number | string): Promise<void> {
     const docId = String(id);
-    const local = getLocalJoiners().filter(j => String(j.id) !== docId);
-    saveLocalJoiners(local);
-
     if (isFirebaseConfigured() && db) {
-      try {
-        await deleteDoc(doc(db, COLLECTION, docId));
-      } catch (err) {
-        console.error('hotelJoinerService.delete error:', err);
-      }
+      const docRef = doc(db, COLLECTION, docId);
+      await deleteDoc(docRef);
     }
   }
 };

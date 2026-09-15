@@ -2,10 +2,10 @@ import {
   collection,
   doc,
   setDoc,
-  updateDoc,
+  getDoc,
+  getDocs,
   deleteDoc,
   onSnapshot,
-  getDocs,
   writeBatch,
   type Unsubscribe,
   type DocumentData
@@ -33,33 +33,13 @@ export type CollectionName =
   | 'notifications'
   | 'settings';
 
-// Helper for local storage fallback
-const getLocalCollection = <T>(name: CollectionName, defaultData: T[]): T[] => {
-  if (typeof window === 'undefined') return defaultData;
-  try {
-    const saved = localStorage.getItem(`farmerbox_${name}`);
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (e) {
-    console.warn(`Error reading local ${name}`, e);
-  }
-  return defaultData;
-};
-
-const saveLocalCollection = <T>(name: CollectionName, data: T[]): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(`farmerbox_${name}`, JSON.stringify(data));
-  } catch (e) {
-    console.warn(`Error writing local ${name}`, e);
-  }
-};
-
-// Helper to clear any local mock caches
+/**
+ * Clean up any legacy localStorage caches from previous mock versions.
+ * Firestore is the ONLY source of truth. LocalStorage is NOT used for application data.
+ */
 export const clearLocalDummyCache = (): void => {
   if (typeof window === 'undefined') return;
-  const collections: CollectionName[] = [
+  const legacyKeys = [
     'orders',
     'zones',
     'joiners',
@@ -67,66 +47,53 @@ export const clearLocalDummyCache = (): void => {
     'drivers',
     'products',
     'payments',
-    'notifications'
+    'notifications',
+    'admin_profile',
+    'joiner_profile'
   ];
-  collections.forEach((c) => {
-    localStorage.removeItem(`farmerbox_${c}`);
+  legacyKeys.forEach((key) => {
+    try {
+      localStorage.removeItem(`farmerbox_${key}`);
+    } catch {
+      // ignore
+    }
   });
 };
 
 /**
- * Real-time collection subscription with Firebase Firestore.
- * When Firebase is connected, mock/dummy data is NOT loaded.
+ * Real-time collection subscription directly and exclusively from Cloud Firestore.
+ * - Always reads from Firestore as the ONLY source of truth.
+ * - If Firestore has no documents, returns an empty array (shows empty state).
+ * - Never loads or falls back to localStorage or mock data.
+ * - If Firestore errors, reports the actual error and does not mask it with fake data.
  */
 export const subscribeToCollection = <T extends { id?: string | number }>(
   collectionName: CollectionName,
-  fallbackData: T[],
-  onUpdate: (data: T[]) => void
+  onUpdate: (data: T[]) => void,
+  onError?: (error: Error) => void
 ): Unsubscribe => {
-  const isFb = isFirebaseConfigured() && db;
-
-  // Immediately supply locally saved records (e.g. from user creation)
-  const cached = getLocalCollection<T>(collectionName, fallbackData);
-  if (cached && cached.length > 0) {
-    onUpdate(cached);
+  if (!isFirebaseConfigured() || !db) {
+    const err = new Error(`Firebase Firestore is not configured for collection '${collectionName}'.`);
+    console.error(err);
+    if (onError) onError(err);
+    onUpdate([]);
+    return () => {};
   }
 
-  if (!isFb) {
-    // Listen to local storage changes for cross-tab sync
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === `farmerbox_${collectionName}` && e.newValue) {
-        try {
-          onUpdate(JSON.parse(e.newValue));
-        } catch {
-          // ignore
-        }
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }
-
-  // Firebase IS connected:
   try {
-    const colRef = collection(db!, collectionName);
+    const colRef = collection(db, collectionName);
     const unsubscribe = onSnapshot(
       colRef,
       (snapshot) => {
         if (snapshot.empty) {
-          // If Firestore collection is empty, retain any user-created local records
-          const currentLocal = getLocalCollection<T>(collectionName, []);
-          if (currentLocal && currentLocal.length > 0) {
-            onUpdate(currentLocal);
-          } else {
-            onUpdate([]);
-          }
+          onUpdate([]);
           return;
         }
 
         const items: T[] = [];
         snapshot.forEach((docSnap) => {
           const docData = docSnap.data() as DocumentData;
-          let idVal: string | number = docData.id !== undefined ? docData.id : docSnap.id;
+          let idVal: string | number = docData.id !== undefined && docData.id !== null ? docData.id : docSnap.id;
           if (typeof idVal === 'string' && /^\d+$/.test(idVal) && collectionName !== 'orders' && collectionName !== 'payments') {
             const num = Number(idVal);
             if (!isNaN(num)) idVal = num;
@@ -137,91 +104,73 @@ export const subscribeToCollection = <T extends { id?: string | number }>(
           } as unknown as T);
         });
 
-        // Update local cache with live items
-        saveLocalCollection(collectionName, items);
         onUpdate(items);
       },
       (error) => {
-        console.warn(`Firestore subscription notice on ${collectionName}:`, error);
-        // Retain local records if Firestore has permission or network errors
-        const currentLocal = getLocalCollection<T>(collectionName, fallbackData);
-        onUpdate(currentLocal);
+        console.error(`Cloud Firestore error on collection '${collectionName}':`, error);
+        if (onError) onError(error);
+        onUpdate([]);
       }
     );
 
     return unsubscribe;
-  } catch (err) {
-    console.error(`Failed to subscribe to ${collectionName}:`, err);
-    const currentLocal = getLocalCollection<T>(collectionName, fallbackData);
-    onUpdate(currentLocal);
+  } catch (err: any) {
+    console.error(`Failed to subscribe to collection '${collectionName}':`, err);
+    if (onError) onError(err);
+    onUpdate([]);
     return () => {};
   }
 };
 
 /**
- * Add or update a document in Firestore & local cache
+ * Add or update a document directly in Cloud Firestore.
+ * Verifies document existence after write to guarantee persistence.
  */
 export const saveRecord = async <T extends { id?: string | number }>(
   collectionName: CollectionName,
   record: T,
   customId?: string
 ): Promise<string> => {
+  if (!isFirebaseConfigured() || !db) {
+    throw new Error('Firebase Firestore is not initialized.');
+  }
+
   const docId = customId || (record.id !== undefined && record.id !== null ? String(record.id) : `doc_${Date.now()}`);
   const recordToSave = { ...record, id: record.id !== undefined ? record.id : docId };
 
-  // 1. ALWAYS persist to local storage cache immediately so data is never lost on refresh
-  const items = getLocalCollection<T>(collectionName, []);
-  const existingIdx = items.findIndex((i) => String(i.id) === docId);
+  const docRef = doc(db, collectionName, docId);
+  await setDoc(docRef, recordToSave, { merge: true });
 
-  if (existingIdx >= 0) {
-    items[existingIdx] = recordToSave;
-  } else {
-    items.unshift(recordToSave);
-  }
-  saveLocalCollection(collectionName, items);
-
-  // 2. Persist to live Cloud Firestore
-  if (isFirebaseConfigured() && db) {
-    try {
-      const docRef = doc(db, collectionName, docId);
-      await setDoc(docRef, recordToSave, { merge: true });
-    } catch (e) {
-      console.warn(`Cloud Firestore write to ${collectionName} pending/restricted:`, e);
-    }
+  // Verification step: Ensure document is stored in Firestore
+  const verifySnap = await getDoc(docRef);
+  if (!verifySnap.exists()) {
+    throw new Error(`Failed to verify document '${docId}' in Firestore collection '${collectionName}'.`);
   }
 
   return docId;
 };
 
 /**
- * Delete a document from Firestore & local cache
+ * Delete a document directly from Cloud Firestore.
  */
 export const deleteRecord = async (
   collectionName: CollectionName,
   id: string | number
 ): Promise<boolean> => {
-  const docId = String(id);
-
-  // 1. Remove from local cache immediately
-  const items = getLocalCollection(collectionName, []);
-  const filtered = items.filter((i: any) => String(i.id) !== docId);
-  saveLocalCollection(collectionName, filtered);
-
-  // 2. Delete from live Firestore
-  if (isFirebaseConfigured() && db) {
-    try {
-      const docRef = doc(db, collectionName, docId);
-      await deleteDoc(docRef);
-    } catch (e) {
-      console.warn(`Cloud Firestore delete on ${collectionName} pending/restricted:`, e);
-    }
+  if (!isFirebaseConfigured() || !db) {
+    throw new Error('Firebase Firestore is not initialized.');
   }
+
+  const docId = String(id);
+  const docRef = doc(db, collectionName, docId);
+  await deleteDoc(docRef);
 
   return true;
 };
 
 /**
- * Seed live Firestore Database with all core FarmerBox records
+ * Seed live Firestore Database with all core FarmerBox records.
+ * Directly inserts records into Cloud Firestore.
  */
 export const seedFirestoreDatabase = async (): Promise<{
   success: boolean;
@@ -229,30 +178,7 @@ export const seedFirestoreDatabase = async (): Promise<{
   message: string;
 }> => {
   if (!isFirebaseConfigured() || !db) {
-    // Seed locally if Firebase isn't configured
-    saveLocalCollection('orders', initialOrders);
-    saveLocalCollection('zones', initialZones);
-    saveLocalCollection('joiners', initialJoiners);
-    saveLocalCollection('hotels', initialHotels);
-    saveLocalCollection('drivers', initialDriversList);
-    saveLocalCollection('products', initialProductsList);
-    saveLocalCollection('payments', initialPayments);
-    saveLocalCollection('notifications', initialNotifications);
-
-    return {
-      success: true,
-      counts: {
-        orders: initialOrders.length,
-        zones: initialZones.length,
-        joiners: initialJoiners.length,
-        hotels: initialHotels.length,
-        drivers: initialDriversList.length,
-        products: initialProductsList.length,
-        payments: initialPayments.length,
-        notifications: initialNotifications.length
-      },
-      message: 'Database seeded to local persistent storage (Firebase credentials not yet provided).'
-    };
+    throw new Error('Firebase Firestore is not configured. Cannot seed database.');
   }
 
   try {
@@ -262,56 +188,56 @@ export const seedFirestoreDatabase = async (): Promise<{
     // 1. Zones
     initialZones.forEach((item) => {
       const ref = doc(db!, 'zones', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 2. Joiners
     initialJoiners.forEach((item) => {
       const ref = doc(db!, 'joiners', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 3. Hotels
     initialHotels.forEach((item) => {
       const ref = doc(db!, 'hotels', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 4. Drivers
     initialDriversList.forEach((item) => {
       const ref = doc(db!, 'drivers', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 5. Products
     initialProductsList.forEach((item) => {
       const ref = doc(db!, 'products', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 6. Orders
     initialOrders.forEach((item) => {
       const ref = doc(db!, 'orders', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 7. Payments
     initialPayments.forEach((item) => {
       const ref = doc(db!, 'payments', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 
     // 8. Notifications
     initialNotifications.forEach((item) => {
       const ref = doc(db!, 'notifications', String(item.id));
-      batch.set(ref, item);
+      batch.set(ref, item, { merge: true });
       totalItems++;
     });
 

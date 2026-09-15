@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { soundEngine } from './utils/sound';
 import { subscribeToCollection, saveRecord } from '../firebase/dbService';
+import { db, isFirebaseConfigured } from '../firebase/config';
 
 export type MobileScreen =
   | 'WELCOME'
@@ -147,31 +149,36 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // User Profile with persistent storage
-  const [userProfile, setUserProfile] = useState<JoinerUserProfile>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('farmerbox_joiner_profile');
-        if (saved) return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return {
-      name: 'Rahul Patil',
-      role: 'Hotel Joiner',
-      zone: 'Kharadi Zone',
-      phone: '9876543210',
-      email: 'rahul.patil@gmail.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-      totalHotels: 0,
-      totalOrders: 0
-    };
+  // User Profile loaded directly from Firestore
+  const [userProfile, setUserProfile] = useState<JoinerUserProfile>({
+    name: 'Rahul Patil',
+    role: 'Hotel Joiner',
+    zone: 'Kharadi Zone',
+    phone: '9876543210',
+    email: 'rahul.patil@gmail.com',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    totalHotels: 0,
+    totalOrders: 0
   });
+
+  // Sync User Profile directly with Firestore 'settings/joiner_profile'
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !db) return;
+    try {
+      const unsub = onSnapshot(doc(db, 'settings', 'joiner_profile'), (snap) => {
+        if (snap.exists()) {
+          setUserProfile(prev => ({ ...prev, ...(snap.data() as JoinerUserProfile) }));
+        }
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn('Joiner profile subscription notice:', e);
+    }
+  }, []);
 
   // 1. Live Hotels Subscription directly from Firestore 'hotels'
   useEffect(() => {
-    const unsubHotels = subscribeToCollection<any>('hotels', [], (h) => {
+    const unsubHotels = subscribeToCollection<any>('hotels', (h) => {
       const mapped: MobileHotel[] = (h || []).map((item: any) => ({
         id: item.id ?? item.hotelId ?? Date.now(),
         hotelId: item.hotelId ?? String(item.id ?? ''),
@@ -195,7 +202,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     });
 
     // 2. Live Products Subscription directly from Firestore 'products'
-    const unsubProducts = subscribeToCollection<any>('products', [], (rawProducts) => {
+    const unsubProducts = subscribeToCollection<any>('products', (rawProducts) => {
       if (rawProducts && rawProducts.length > 0) {
         const mapped: MobileProduct[] = rawProducts.map((p: any) => {
           let fallbackImg = '/products/fenugreek.jpg';
@@ -226,7 +233,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     });
 
     // 3. Live Orders Subscription directly from Firestore 'orders'
-    const unsubOrders = subscribeToCollection<any>('orders', [], (rawOrders) => {
+    const unsubOrders = subscribeToCollection<any>('orders', (rawOrders) => {
       const mapped: MobileOrder[] = (rawOrders || []).map((o: any) => ({
         id: String(o.id || o.orderId || '#FB0000'),
         orderId: String(o.orderId || o.id || '#FB0000'),
@@ -252,7 +259,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     });
 
     // 4. Live Notifications Subscription directly from Firestore 'notifications'
-    const unsubNotifs = subscribeToCollection<any>('notifications', [], (rawNotifs) => {
+    const unsubNotifs = subscribeToCollection<any>('notifications', (rawNotifs) => {
       const mapped: MobileNotification[] = (rawNotifs || []).map((n: any) => ({
         id: String(n.id || Date.now()),
         title: n.title || 'Notification',
@@ -373,7 +380,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   // Add Hotel: Inserts hotel directly into Cloud Firestore 'hotels' collection
-  const addHotel = (newHotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => {
+  const addHotel = async (newHotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => {
     const docId = `HT${Date.now().toString().slice(-6)}`;
     const hotelToSave: any = {
       id: docId,
@@ -396,14 +403,15 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       updatedAt: new Date().toISOString()
     };
 
-    saveRecord('hotels', hotelToSave, docId);
+    await saveRecord('hotels', hotelToSave, docId);
     setHotels(prev => [hotelToSave, ...prev]);
     setSelectedHotel(hotelToSave);
-    setUserProfile(prev => {
-      const updated = { ...prev, totalHotels: (prev.totalHotels || 0) + 1 };
-      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+
+    const updatedProfile = { ...userProfile, totalHotels: (userProfile.totalHotels || 0) + 1 };
+    setUserProfile(updatedProfile);
+    if (isFirebaseConfigured() && db) {
+      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updatedProfile, { merge: true }); } catch {}
+    }
 
     addNotification({
       title: 'Hotel Partner Added!',
@@ -464,11 +472,11 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     setLastPlacedOrder(newOrder);
     clearCart();
 
-    setUserProfile(prev => {
-      const updated = { ...prev, totalOrders: (prev.totalOrders || 0) + 1 };
-      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    const updatedProfile = { ...userProfile, totalOrders: (userProfile.totalOrders || 0) + 1 };
+    setUserProfile(updatedProfile);
+    if (isFirebaseConfigured() && db) {
+      try { setDoc(doc(db, 'settings', 'joiner_profile'), updatedProfile, { merge: true }); } catch {}
+    }
 
     addNotification({
       title: 'New Order Placed!',
@@ -481,7 +489,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     return newOrder;
   };
 
-  const registerUser = (data: { name: string; phone: string; email: string; zone: string }) => {
+  const registerUser = async (data: { name: string; phone: string; email: string; zone: string }) => {
     const updated = {
       name: data.name,
       phone: data.phone,
@@ -493,27 +501,29 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       totalOrders: 0
     };
     setUserProfile(updated);
-    try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
+    if (isFirebaseConfigured() && db) {
+      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updated, { merge: true }); } catch {}
+    }
   };
 
-  const loginUser = (phone: string) => {
-    setUserProfile(prev => {
-      const updated = {
-        ...prev,
-        phone,
-        name: phone === '9876543210' ? 'Rahul Patil' : `Joiner ${phone.slice(-4)}`
-      };
-      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+  const loginUser = async (phone: string) => {
+    const updated = {
+      ...userProfile,
+      phone,
+      name: phone === '9876543210' ? 'Rahul Patil' : `Joiner ${phone.slice(-4)}`
+    };
+    setUserProfile(updated);
+    if (isFirebaseConfigured() && db) {
+      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updated, { merge: true }); } catch {}
+    }
   };
 
-  const updateUserProfile = (data: Partial<typeof userProfile>) => {
-    setUserProfile(prev => {
-      const updated = { ...prev, ...data };
-      try { localStorage.setItem('farmerbox_joiner_profile', JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+  const updateUserProfile = async (data: Partial<JoinerUserProfile>) => {
+    const updated = { ...userProfile, ...data };
+    setUserProfile(updated);
+    if (isFirebaseConfigured() && db) {
+      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updated, { merge: true }); } catch {}
+    }
   };
 
   return (
