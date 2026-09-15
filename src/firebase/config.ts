@@ -58,17 +58,6 @@ if (isFirebaseConfigured()) {
     db = getFirestore(app);
     storage = getStorage(app);
     auth = getAuth(app);
-
-    // Ensure authenticated session for Firestore security rules
-    if (auth) {
-      onAuthStateChanged(auth, (user) => {
-        if (!user && auth) {
-          signInAnonymously(auth).catch((err) => {
-            console.warn('Anonymous auth note (check if enabled in Firebase Console):', err?.message);
-          });
-        }
-      });
-    }
   } catch (err) {
     console.error('Failed to initialize Firebase app:', err);
   }

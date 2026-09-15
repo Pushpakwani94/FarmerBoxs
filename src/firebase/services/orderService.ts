@@ -77,6 +77,71 @@ export const orderService = {
     }
   },
 
+  subscribeForJoiner(uid: string, onUpdate: (orders: Order[]) => void, onError?: (error: Error) => void): Unsubscribe {
+    if (!isFirebaseConfigured() || !db) {
+      if (onError) onError(new Error('Firebase Firestore is not configured.'));
+      onUpdate([]);
+      return () => {};
+    }
+
+    try {
+      const colRef = collection(db, COLLECTION);
+      return onSnapshot(
+        colRef,
+        (snapshot) => {
+          if (snapshot.empty) {
+            onUpdate([]);
+            return;
+          }
+
+          const orders: Order[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data();
+            const joinerId = String(data.joinerId || data.joinedBy || '');
+            // Enforce user-level isolation: Joiner sees ONLY their own orders
+            if (joinerId === uid) {
+              orders.push({
+                ...data,
+                id: String(data.id || data.orderId || d.id),
+                orderId: String(data.orderId || data.id || d.id),
+                hotelId: data.hotelId,
+                hotelName: data.hotelName || 'Partner Hotel',
+                zone: data.zone || data.hotelZone || 'Kharadi',
+                joiner: data.joiner || 'Rahul Patil',
+                joinerId: joinerId,
+                date: data.date || 'Today',
+                time: data.time || '10:00 AM',
+                amount: Number(data.totalAmount ?? data.amount ?? 0),
+                totalAmount: Number(data.totalAmount ?? data.amount ?? 0),
+                subtotal: Number(data.subtotal ?? data.amount ?? 0),
+                deliveryCharge: Number(data.deliveryCharge ?? 0),
+                paymentMode: data.paymentMode || data.paymentMethod || 'Online',
+                paymentStatus: data.paymentStatus || 'Pending',
+                driver: data.driver || 'Unassigned',
+                status: data.status || data.orderStatus || 'Pending',
+                orderStatus: data.orderStatus || data.status || 'Pending',
+                commission: Number(data.commission ?? 100),
+                items: data.items || []
+              } as Order);
+            }
+          });
+
+          onUpdate(orders);
+        },
+        (error) => {
+          console.error('orderService subscribeForJoiner error:', error);
+          if (onError) onError(error);
+          onUpdate([]);
+        }
+      );
+    } catch (err: any) {
+      console.error('orderService subscribeForJoiner exception:', err);
+      if (onError) onError(err);
+      onUpdate([]);
+      return () => {};
+    }
+  },
+
   async getAll(): Promise<Order[]> {
     if (!isFirebaseConfigured() || !db) return [];
     try {

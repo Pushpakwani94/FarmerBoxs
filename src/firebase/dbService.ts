@@ -7,8 +7,11 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
+  query,
+  where,
   type Unsubscribe,
-  type DocumentData
+  type DocumentData,
+  type QueryConstraint
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './config';
 import {
@@ -31,7 +34,8 @@ export type CollectionName =
   | 'products'
   | 'payments'
   | 'notifications'
-  | 'settings';
+  | 'settings'
+  | 'users';
 
 /**
  * Clean up any legacy localStorage caches from previous mock versions.
@@ -66,11 +70,13 @@ export const clearLocalDummyCache = (): void => {
  * - If Firestore has no documents, returns an empty array (shows empty state).
  * - Never loads or falls back to localStorage or mock data.
  * - If Firestore errors, reports the actual error and does not mask it with fake data.
+ * - Supports optional Firestore QueryConstraints (e.g. where filters for user scoping).
  */
 export const subscribeToCollection = <T extends { id?: string | number }>(
   collectionName: CollectionName,
   onUpdate: (data: T[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  constraints?: QueryConstraint[]
 ): Unsubscribe => {
   if (!isFirebaseConfigured() || !db) {
     const err = new Error(`Firebase Firestore is not configured for collection '${collectionName}'.`);
@@ -82,8 +88,10 @@ export const subscribeToCollection = <T extends { id?: string | number }>(
 
   try {
     const colRef = collection(db, collectionName);
+    const targetRef = constraints && constraints.length > 0 ? query(colRef, ...constraints) : colRef;
+
     const unsubscribe = onSnapshot(
-      colRef,
+      targetRef,
       (snapshot) => {
         if (snapshot.empty) {
           onUpdate([]);

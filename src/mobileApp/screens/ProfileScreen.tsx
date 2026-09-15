@@ -22,7 +22,7 @@ import { useJoinerApp } from '../JoinerAppContext';
 import { MobileBottomNav } from '../components/MobileBottomNav';
 
 export const ProfileScreen: React.FC = () => {
-  const { userProfile, hotels, orders, setCurrentScreen, updateUserProfile } = useJoinerApp();
+  const { userProfile, hotels, orders, setCurrentScreen, updateUserProfile, logoutUser } = useJoinerApp();
 
   // Modals state
   const [activeModal, setActiveModal] = useState<'NONE' | 'EDIT_PROFILE' | 'BANK_DETAILS' | 'CHANGE_PASSWORD' | 'HELP_SUPPORT' | 'LOGOUT_CONFIRM'>('NONE');
@@ -127,9 +127,9 @@ export const ProfileScreen: React.FC = () => {
     }, 1000);
   };
 
-  const handleConfirmLogout = () => {
+  const handleConfirmLogout = async () => {
     setActiveModal('NONE');
-    setCurrentScreen('LOGIN');
+    await logoutUser();
   };
 
   return (

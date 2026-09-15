@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useMemo, type Re
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { soundEngine } from './utils/sound';
 import { subscribeToCollection, saveRecord } from '../firebase/dbService';
+import { hotelService } from '../firebase/services/hotelService';
+import { orderService } from '../firebase/services/orderService';
+import { authService, type AppUser } from '../firebase/authService';
 import { db, isFirebaseConfigured } from '../firebase/config';
 
 export type MobileScreen =
@@ -33,6 +36,9 @@ export interface MobileHotel {
   orders: number;
   status: 'Active' | 'Pending' | 'Inactive';
   image: string;
+  joinedBy?: string;
+  joinerId?: string;
+  assignedJoiner?: string;
 }
 
 export interface MobileProduct {
@@ -59,6 +65,7 @@ export interface MobileOrder {
   zone?: string;
   joiner?: string;
   joinerId?: string | number;
+  joinedBy?: string;
   date: string;
   timeSlot: string;
   amount: number;
@@ -82,6 +89,7 @@ export interface MobileNotification {
 }
 
 export interface JoinerUserProfile {
+  uid: string;
   name: string;
   role: string;
   zone: string;
@@ -98,7 +106,7 @@ interface JoinerAppContextType {
   selectedHotel: MobileHotel | null;
   setSelectedHotel: (hotel: MobileHotel | null) => void;
   hotels: MobileHotel[];
-  addHotel: (hotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => void;
+  addHotel: (hotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => Promise<void>;
   products: MobileProduct[];
   cart: CartItem[];
   addToCart: (product: MobileProduct) => void;
@@ -130,12 +138,42 @@ interface JoinerAppContextType {
     status: 'Paid' | 'Pending';
   }>;
   userProfile: JoinerUserProfile;
-  registerUser: (data: { name: string; phone: string; email: string; zone: string }) => void;
-  loginUser: (phone: string) => void;
-  updateUserProfile: (data: Partial<JoinerUserProfile>) => void;
+  registerUser: (data: { name: string; phone: string; email: string; zone: string; password?: string }) => Promise<void>;
+  loginUser: (phone: string, password?: string) => Promise<void>;
+  logoutUser: () => Promise<void>;
+  updateUserProfile: (data: Partial<JoinerUserProfile>) => Promise<void>;
 }
 
 const JoinerAppContext = createContext<JoinerAppContextType | undefined>(undefined);
+
+const getDefaultProfile = (storedUser: AppUser | null): JoinerUserProfile => {
+  if (storedUser) {
+    return {
+      uid: storedUser.uid,
+      name: storedUser.name,
+      role: storedUser.role === 'admin' ? 'Super Admin' : 'Hotel Joiner',
+      zone: storedUser.zone || 'Kharadi Zone',
+      phone: storedUser.phone || '',
+      email: storedUser.email || '',
+      avatar: storedUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      totalHotels: 0,
+      totalOrders: 0
+    };
+  }
+
+  // Fallback initial User A (Rahul Patil)
+  return {
+    uid: 'usr_9876543210',
+    name: 'Rahul Patil',
+    role: 'Hotel Joiner',
+    zone: 'Kharadi Zone',
+    phone: '9876543210',
+    email: 'rahul.patil@gmail.com',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    totalHotels: 0,
+    totalOrders: 0
+  };
+};
 
 export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('DASHBOARD');
@@ -149,59 +187,56 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<MobileNotification[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // User Profile loaded directly from Firestore
-  const [userProfile, setUserProfile] = useState<JoinerUserProfile>({
-    name: 'Rahul Patil',
-    role: 'Hotel Joiner',
-    zone: 'Kharadi Zone',
-    phone: '9876543210',
-    email: 'rahul.patil@gmail.com',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-    totalHotels: 0,
-    totalOrders: 0
-  });
+  // User Profile loaded and synchronized with authService and Firestore
+  const [userProfile, setUserProfile] = useState<JoinerUserProfile>(() =>
+    getDefaultProfile(authService.getCurrentUser())
+  );
 
-  // Sync User Profile directly with Firestore 'settings/joiner_profile'
+  // Listen to live Auth changes (persists across page reloads and browser refreshes)
   useEffect(() => {
-    if (!isFirebaseConfigured() || !db) return;
+    const unsubAuth = authService.onAuthChange((user) => {
+      if (user) {
+        setUserProfile(prev => ({
+          ...prev,
+          uid: user.uid,
+          name: user.name,
+          role: user.role === 'admin' ? 'Super Admin' : 'Hotel Joiner',
+          zone: user.zone || prev.zone,
+          phone: user.phone || prev.phone,
+          email: user.email || prev.email,
+          avatar: user.avatar || prev.avatar
+        }));
+      }
+    });
+
+    return () => unsubAuth();
+  }, []);
+
+  // Sync user profile document from Firestore 'users/{uid}'
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !db || !userProfile.uid) return;
     try {
-      const unsub = onSnapshot(doc(db, 'settings', 'joiner_profile'), (snap) => {
+      const unsub = onSnapshot(doc(db, 'users', userProfile.uid), (snap) => {
         if (snap.exists()) {
-          setUserProfile(prev => ({ ...prev, ...(snap.data() as JoinerUserProfile) }));
+          const data = snap.data();
+          setUserProfile(prev => ({
+            ...prev,
+            name: data.name || prev.name,
+            phone: data.phone || prev.phone,
+            email: data.email || prev.email,
+            zone: data.zone || prev.zone,
+            avatar: data.avatar || prev.avatar
+          }));
         }
       });
       return () => unsub();
     } catch (e) {
-      console.warn('Joiner profile subscription notice:', e);
+      console.warn('User profile subscription notice:', e);
     }
-  }, []);
+  }, [userProfile.uid]);
 
-  // 1. Live Hotels Subscription directly from Firestore 'hotels'
+  // 1. Live Products and Notifications Subscriptions (Global / Catalog)
   useEffect(() => {
-    const unsubHotels = subscribeToCollection<any>('hotels', (h) => {
-      const mapped: MobileHotel[] = (h || []).map((item: any) => ({
-        id: item.id ?? item.hotelId ?? Date.now(),
-        hotelId: item.hotelId ?? String(item.id ?? ''),
-        name: item.name || 'Unnamed Hotel',
-        zone: item.zone || 'Kharadi',
-        contactPerson: item.contactPerson || item.ownerName || '',
-        phone: item.phone || item.mobile || '',
-        address: item.address || '',
-        gst: item.gst || '',
-        fssai: item.fssai || '',
-        orders: Number(item.orders || 0),
-        status: (item.status === 'Active' || item.status === 'Pending' || item.status === 'Inactive') ? item.status : 'Active',
-        image: item.image || item.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100'
-      }));
-      setHotels(mapped);
-      if (mapped.length > 0) {
-        setSelectedHotel(prev => prev ? (mapped.find(item => String(item.id) === String(prev.id)) || mapped[0]) : mapped[0]);
-      } else {
-        setSelectedHotel(null);
-      }
-    });
-
-    // 2. Live Products Subscription directly from Firestore 'products'
     const unsubProducts = subscribeToCollection<any>('products', (rawProducts) => {
       if (rawProducts && rawProducts.length > 0) {
         const mapped: MobileProduct[] = rawProducts.map((p: any) => {
@@ -232,33 +267,6 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       }
     });
 
-    // 3. Live Orders Subscription directly from Firestore 'orders'
-    const unsubOrders = subscribeToCollection<any>('orders', (rawOrders) => {
-      const mapped: MobileOrder[] = (rawOrders || []).map((o: any) => ({
-        id: String(o.id || o.orderId || '#FB0000'),
-        orderId: String(o.orderId || o.id || '#FB0000'),
-        hotelId: o.hotelId,
-        hotelName: o.hotelName || 'Partner Hotel',
-        hotelZone: o.hotelZone || o.zone || 'Kharadi',
-        zone: o.zone || o.hotelZone || 'Kharadi',
-        joiner: o.joiner || userProfile.name,
-        joinerId: o.joinerId || 'JN01',
-        date: o.date || 'Today',
-        timeSlot: o.timeSlot || '8 AM - 10 AM',
-        amount: Number(o.totalAmount ?? o.amount ?? 0),
-        subtotal: Number(o.subtotal ?? o.amount ?? 0),
-        totalAmount: Number(o.totalAmount ?? o.amount ?? 0),
-        deliveryCharge: Number(o.deliveryCharge ?? 0),
-        paymentMode: o.paymentMode || o.paymentMethod || 'Online',
-        paymentStatus: o.paymentStatus || 'Pending',
-        status: o.status || o.orderStatus || 'Pending',
-        orderStatus: o.orderStatus || o.status || 'Pending',
-        items: o.items || []
-      }));
-      setOrders(mapped);
-    });
-
-    // 4. Live Notifications Subscription directly from Firestore 'notifications'
     const unsubNotifs = subscribeToCollection<any>('notifications', (rawNotifs) => {
       const mapped: MobileNotification[] = (rawNotifs || []).map((n: any) => ({
         id: String(n.id || Date.now()),
@@ -272,14 +280,95 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     });
 
     return () => {
-      unsubHotels();
       unsubProducts();
-      unsubOrders();
       unsubNotifs();
     };
-  }, [userProfile.name]);
+  }, []);
 
-  // Dynamic Commission calculation from LIVE Orders
+  // 2. User-Scoped Hotels and Orders Subscriptions — strictly isolated by user UID
+  useEffect(() => {
+    if (!userProfile.uid) {
+      setHotels([]);
+      setSelectedHotel(null);
+      setOrders([]);
+      return;
+    }
+
+    const unsubHotels = hotelService.subscribeForJoiner(
+      userProfile.uid,
+      (mappedHotels) => {
+        const transformed: MobileHotel[] = mappedHotels.map((item: any) => ({
+          id: item.id ?? item.hotelId ?? Date.now(),
+          hotelId: item.hotelId ?? String(item.id ?? ''),
+          name: item.name || 'Unnamed Hotel',
+          zone: item.zone || 'Kharadi',
+          contactPerson: item.contactPerson || item.ownerName || '',
+          phone: item.phone || item.mobile || '',
+          address: item.address || '',
+          gst: item.gst || item.gstNumber || '',
+          fssai: item.fssai || item.fssaiNumber || '',
+          orders: Number(item.orders || item.totalOrders || 0),
+          status: (item.status === 'Active' || item.status === 'Pending' || item.status === 'Inactive') ? item.status : 'Active',
+          image: item.image || item.imageUrl || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100',
+          joinedBy: item.joinedBy,
+          joinerId: item.joinerId,
+          assignedJoiner: item.assignedJoiner || item.joiner
+        }));
+
+        setHotels(transformed);
+        setSelectedHotel(prev => {
+          if (!prev && transformed.length > 0) return transformed[0];
+          if (prev) {
+            const found = transformed.find(item => String(item.id) === String(prev.id));
+            return found || (transformed.length > 0 ? transformed[0] : null);
+          }
+          return null;
+        });
+      },
+      (error) => {
+        console.error('Mobile hotels Firestore error:', error);
+      }
+    );
+
+    const unsubOrders = orderService.subscribeForJoiner(
+      userProfile.uid,
+      (rawOrders) => {
+        const mapped: MobileOrder[] = (rawOrders || []).map((o: any) => ({
+          id: String(o.id || o.orderId || '#FB0000'),
+          orderId: String(o.orderId || o.id || '#FB0000'),
+          hotelId: o.hotelId,
+          hotelName: o.hotelName || 'Partner Hotel',
+          hotelZone: o.hotelZone || o.zone || 'Kharadi',
+          zone: o.zone || o.hotelZone || 'Kharadi',
+          joiner: o.joiner || userProfile.name,
+          joinerId: o.joinerId || userProfile.uid,
+          joinedBy: o.joinedBy || userProfile.uid,
+          date: o.date || 'Today',
+          timeSlot: o.timeSlot || '8 AM - 10 AM',
+          amount: Number(o.totalAmount ?? o.amount ?? 0),
+          subtotal: Number(o.subtotal ?? o.amount ?? 0),
+          totalAmount: Number(o.totalAmount ?? o.amount ?? 0),
+          deliveryCharge: Number(o.deliveryCharge ?? 0),
+          paymentMode: o.paymentMode || o.paymentMethod || 'Online',
+          paymentStatus: o.paymentStatus || 'Pending',
+          status: o.status || o.orderStatus || 'Pending',
+          orderStatus: o.orderStatus || o.status || 'Pending',
+          items: o.items || []
+        }));
+        setOrders(mapped);
+      },
+      (error) => {
+        console.error('Mobile orders Firestore error:', error);
+      }
+    );
+
+    return () => {
+      unsubHotels();
+      unsubOrders();
+    };
+  }, [userProfile.uid]);
+
+  // Dynamic Commission calculation strictly from the current joiner's LIVE Orders
   const commissionBalance = useMemo(() => {
     let paid = 0;
     let pending = 0;
@@ -379,7 +468,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     setCart([]);
   };
 
-  // Add Hotel: Inserts hotel directly into Cloud Firestore 'hotels' collection
+  // Add Hotel: Inserts hotel directly into Cloud Firestore 'hotels' collection with joinedBy & joinerId set to currentUser.uid
   const addHotel = async (newHotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => {
     const docId = `HT${Date.now().toString().slice(-6)}`;
     const hotelToSave: any = {
@@ -397,7 +486,8 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       fssai: newHotel.fssai || '',
       type: newHotel.type || 'Restaurant',
       assignedJoiner: userProfile.name,
-      joinerId: 'JN01',
+      joinedBy: userProfile.uid,
+      joinerId: userProfile.uid,
       dailyOrderKg: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -409,9 +499,6 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     const updatedProfile = { ...userProfile, totalHotels: (userProfile.totalHotels || 0) + 1 };
     setUserProfile(updatedProfile);
-    if (isFirebaseConfigured() && db) {
-      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updatedProfile, { merge: true }); } catch {}
-    }
 
     addNotification({
       title: 'Hotel Partner Added!',
@@ -422,7 +509,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     });
   };
 
-  // Add Order: Inserts order directly into Cloud Firestore 'orders' collection
+  // Add Order: Inserts order directly into Cloud Firestore 'orders' collection with joinerId set to currentUser.uid
   const addOrder = (orderData: Partial<MobileOrder>): MobileOrder => {
     const orderNum = Math.floor(1000 + Math.random() * 9000);
     const orderId = `#FB${orderNum}`;
@@ -446,7 +533,8 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       hotelZone: orderData.hotelZone || (hotelObj ? hotelObj.zone : userProfile.zone.replace(' Zone', '')),
       zone: orderData.hotelZone || (hotelObj ? hotelObj.zone : userProfile.zone.replace(' Zone', '')),
       joiner: userProfile.name || 'Rahul Patil',
-      joinerId: 'JN01',
+      joinerId: userProfile.uid,
+      joinedBy: userProfile.uid,
       date: orderData.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timeSlot: orderData.timeSlot || '8 AM - 10 AM',
@@ -474,9 +562,6 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     const updatedProfile = { ...userProfile, totalOrders: (userProfile.totalOrders || 0) + 1 };
     setUserProfile(updatedProfile);
-    if (isFirebaseConfigured() && db) {
-      try { setDoc(doc(db, 'settings', 'joiner_profile'), updatedProfile, { merge: true }); } catch {}
-    }
 
     addNotification({
       title: 'New Order Placed!',
@@ -489,41 +574,67 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     return newOrder;
   };
 
-  const registerUser = async (data: { name: string; phone: string; email: string; zone: string }) => {
-    const updated = {
-      name: data.name,
-      phone: data.phone,
-      email: data.email,
-      zone: `${data.zone} Zone`,
+  const registerUser = async (data: { name: string; phone: string; email: string; zone: string; password?: string }) => {
+    const user = await authService.registerJoiner(data);
+    setUserProfile({
+      uid: user.uid,
+      name: user.name,
       role: 'Hotel Joiner',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+      zone: user.zone,
+      phone: user.phone,
+      email: user.email,
+      avatar: user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       totalHotels: 0,
       totalOrders: 0
-    };
-    setUserProfile(updated);
-    if (isFirebaseConfigured() && db) {
-      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updated, { merge: true }); } catch {}
-    }
+    });
   };
 
-  const loginUser = async (phone: string) => {
-    const updated = {
-      ...userProfile,
-      phone,
-      name: phone === '9876543210' ? 'Rahul Patil' : `Joiner ${phone.slice(-4)}`
-    };
-    setUserProfile(updated);
-    if (isFirebaseConfigured() && db) {
-      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updated, { merge: true }); } catch {}
-    }
+  const loginUser = async (identifier: string, password?: string) => {
+    const user = await authService.loginWithPhoneOrEmail(identifier, password, 'joiner');
+    setUserProfile({
+      uid: user.uid,
+      name: user.name,
+      role: 'Hotel Joiner',
+      zone: user.zone,
+      phone: user.phone,
+      email: user.email,
+      avatar: user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+      totalHotels: 0,
+      totalOrders: 0
+    });
+  };
+
+  const logoutUser = async () => {
+    await authService.logout();
+    setUserProfile({
+      uid: '',
+      name: '',
+      role: 'joiner',
+      zone: '',
+      phone: '',
+      email: '',
+      avatar: '',
+      totalHotels: 0,
+      totalOrders: 0
+    });
+    setHotels([]);
+    setOrders([]);
+    setSelectedHotel(null);
+    setCurrentScreen('LOGIN');
   };
 
   const updateUserProfile = async (data: Partial<JoinerUserProfile>) => {
     const updated = { ...userProfile, ...data };
     setUserProfile(updated);
-    if (isFirebaseConfigured() && db) {
-      try { await setDoc(doc(db, 'settings', 'joiner_profile'), updated, { merge: true }); } catch {}
-    }
+    await authService.saveUserProfile({
+      uid: userProfile.uid,
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone,
+      role: 'joiner',
+      zone: updated.zone,
+      avatar: updated.avatar
+    });
   };
 
   return (
@@ -558,6 +669,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
         userProfile,
         registerUser,
         loginUser,
+        logoutUser,
         updateUserProfile
       }}
     >

@@ -14,7 +14,7 @@ export const LoginScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mobile || mobile.length < 10) {
       alert('Please enter a valid 10-digit mobile number');
@@ -32,11 +32,14 @@ export const LoginScreen: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      loginUser(mobile);
+    try {
+      await loginUser(mobile, password);
       setIsLoading(false);
       setCurrentScreen('DASHBOARD');
-    }, 600);
+    } catch (err: any) {
+      setIsLoading(false);
+      alert(err.message || 'Login failed');
+    }
   };
 
   const handleSendOtp = () => {

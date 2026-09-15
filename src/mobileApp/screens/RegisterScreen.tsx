@@ -44,7 +44,7 @@ export const RegisterScreen: React.FC = () => {
     'Pimpri Chinchwad'
   ];
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !mobile || !email || !zone || !password) {
       alert('Please fill all required fields');
@@ -67,12 +67,13 @@ export const RegisterScreen: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      registerUser({
+    try {
+      await registerUser({
         name,
         phone: mobile,
         email,
-        zone
+        zone,
+        password
       });
       setIsLoading(false);
       setIsSuccess(true);
@@ -80,7 +81,10 @@ export const RegisterScreen: React.FC = () => {
         setIsSuccess(false);
         setCurrentScreen('DASHBOARD');
       }, 1200);
-    }, 800);
+    } catch (err: any) {
+      setIsLoading(false);
+      alert(err.message || 'Registration failed');
+    }
   };
 
   return (
