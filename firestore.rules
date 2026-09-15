@@ -19,10 +19,13 @@ service cloud.firestore {
       );
     }
 
-    // User Profile collection (users/{uid})
+    // User Profile collection (users/{uid}) and isolated subcollections
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow write: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow read, write: if !isAuthenticated() || (isOwner(userId) || isAdmin());
+
+      match /{subcollection=**} {
+        allow read, write: if !isAuthenticated() || (isOwner(userId) || isAdmin());
+      }
     }
 
     // Hotels collection: Joiners see only their own hotels (joinedBy == uid), Admins see all

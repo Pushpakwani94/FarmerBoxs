@@ -28,7 +28,7 @@ import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 
 export const MobileDeviceSimulator: React.FC = () => {
-  const { currentScreen, setCurrentScreen } = useJoinerApp();
+  const { currentScreen, setCurrentScreen, userProfile } = useJoinerApp();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   const screenList: Array<{ id: MobileScreen; label: string; num: number }> = [
@@ -49,6 +49,11 @@ export const MobileDeviceSimulator: React.FC = () => {
   ];
 
   const renderActiveScreen = () => {
+    // If not authenticated, private screens require login
+    if (!userProfile.uid && currentScreen !== 'WELCOME' && currentScreen !== 'LOGIN' && currentScreen !== 'REGISTER') {
+      return <LoginScreen />;
+    }
+
     switch (currentScreen) {
       case 'WELCOME':
         return <WelcomeScreen />;

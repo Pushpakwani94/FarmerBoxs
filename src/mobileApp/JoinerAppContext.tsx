@@ -138,6 +138,9 @@ interface JoinerAppContextType {
     status: 'Paid' | 'Pending';
   }>;
   userProfile: JoinerUserProfile;
+  sendPhoneOtp: (phone: string, containerId?: string) => Promise<{ success: boolean; message: string; formattedPhone: string }>;
+  verifyPhoneOtp: (otp: string, phone: string, name?: string, zone?: string) => Promise<void>;
+  resendPhoneOtp: (phone: string, containerId?: string) => Promise<{ success: boolean; message: string }>;
   registerUser: (data: { name: string; phone: string; email: string; zone: string; password?: string }) => Promise<void>;
   loginUser: (phone: string, password?: string) => Promise<void>;
   logoutUser: () => Promise<void>;
@@ -147,10 +150,10 @@ interface JoinerAppContextType {
 const JoinerAppContext = createContext<JoinerAppContextType | undefined>(undefined);
 
 const getDefaultProfile = (storedUser: AppUser | null): JoinerUserProfile => {
-  if (storedUser) {
+  if (storedUser && storedUser.uid) {
     return {
       uid: storedUser.uid,
-      name: storedUser.name,
+      name: storedUser.name || `Joiner ${storedUser.phone?.slice(-4) || ''}`,
       role: storedUser.role === 'admin' ? 'Super Admin' : 'Hotel Joiner',
       zone: storedUser.zone || 'Kharadi Zone',
       phone: storedUser.phone || '',
@@ -161,14 +164,13 @@ const getDefaultProfile = (storedUser: AppUser | null): JoinerUserProfile => {
     };
   }
 
-  // Fallback initial User A (Rahul Patil)
   return {
-    uid: 'usr_9876543210',
-    name: 'Rahul Patil',
+    uid: '',
+    name: '',
     role: 'Hotel Joiner',
     zone: 'Kharadi Zone',
-    phone: '9876543210',
-    email: 'rahul.patil@gmail.com',
+    phone: '',
+    email: '',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
     totalHotels: 0,
     totalOrders: 0
@@ -176,7 +178,11 @@ const getDefaultProfile = (storedUser: AppUser | null): JoinerUserProfile => {
 };
 
 export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentScreen, setCurrentScreen] = useState<MobileScreen>('DASHBOARD');
+  const initialUser = authService.getCurrentUser();
+  const [currentScreen, setCurrentScreen] = useState<MobileScreen>(() =>
+    initialUser && initialUser.uid ? 'DASHBOARD' : 'LOGIN'
+  );
+
   const [hotels, setHotels] = useState<MobileHotel[]>([]);
   const [selectedHotel, setSelectedHotel] = useState<MobileHotel | null>(null);
   const [products, setProducts] = useState<MobileProduct[]>([]);
@@ -189,23 +195,42 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // User Profile loaded and synchronized with authService and Firestore
   const [userProfile, setUserProfile] = useState<JoinerUserProfile>(() =>
-    getDefaultProfile(authService.getCurrentUser())
+    getDefaultProfile(initialUser)
   );
 
-  // Listen to live Auth changes (persists across page reloads and browser refreshes)
+  // Listen to live Auth changes
   useEffect(() => {
     const unsubAuth = authService.onAuthChange((user) => {
-      if (user) {
+      if (user && user.uid) {
         setUserProfile(prev => ({
           ...prev,
           uid: user.uid,
-          name: user.name,
+          name: user.name || prev.name,
           role: user.role === 'admin' ? 'Super Admin' : 'Hotel Joiner',
           zone: user.zone || prev.zone,
           phone: user.phone || prev.phone,
           email: user.email || prev.email,
           avatar: user.avatar || prev.avatar
         }));
+      } else {
+        // Logged out
+        setUserProfile({
+          uid: '',
+          name: '',
+          role: 'Hotel Joiner',
+          zone: 'Kharadi Zone',
+          phone: '',
+          email: '',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          totalHotels: 0,
+          totalOrders: 0
+        });
+        setHotels([]);
+        setSelectedHotel(null);
+        setOrders([]);
+        setCart([]);
+        setLastPlacedOrder(null);
+        setCurrentScreen('LOGIN');
       }
     });
 
@@ -222,7 +247,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
           setUserProfile(prev => ({
             ...prev,
             name: data.name || prev.name,
-            phone: data.phone || prev.phone,
+            phone: data.phone || data.phoneNumber?.replace('+91', '') || prev.phone,
             email: data.email || prev.email,
             zone: data.zone || prev.zone,
             avatar: data.avatar || prev.avatar
@@ -470,6 +495,10 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // Add Hotel: Inserts hotel directly into Cloud Firestore 'hotels' collection with joinedBy & joinerId set to currentUser.uid
   const addHotel = async (newHotel: Omit<MobileHotel, 'id'> & { [key: string]: any }) => {
+    if (!userProfile.uid) {
+      throw new Error('Please log in to register hotels.');
+    }
+
     const docId = `HT${Date.now().toString().slice(-6)}`;
     const hotelToSave: any = {
       id: docId,
@@ -511,6 +540,10 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // Add Order: Inserts order directly into Cloud Firestore 'orders' collection with joinerId set to currentUser.uid
   const addOrder = (orderData: Partial<MobileOrder>): MobileOrder => {
+    if (!userProfile.uid) {
+      throw new Error('Please log in to place orders.');
+    }
+
     const orderNum = Math.floor(1000 + Math.random() * 9000);
     const orderId = `#FB${orderNum}`;
 
@@ -574,6 +607,31 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     return newOrder;
   };
 
+  // Phone OTP Flow Methods
+  const sendPhoneOtp = async (phone: string, containerId?: string) => {
+    return await authService.sendPhoneOtp(phone, containerId);
+  };
+
+  const verifyPhoneOtp = async (otp: string, phone: string, name?: string, zone?: string) => {
+    const user = await authService.verifyPhoneOtp(otp, phone, name, zone);
+    setUserProfile({
+      uid: user.uid,
+      name: user.name,
+      role: user.role === 'admin' ? 'Super Admin' : 'Hotel Joiner',
+      zone: user.zone,
+      phone: user.phone,
+      email: user.email,
+      avatar: user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      totalHotels: 0,
+      totalOrders: 0
+    });
+    setCurrentScreen('DASHBOARD');
+  };
+
+  const resendPhoneOtp = async (phone: string, containerId?: string) => {
+    return await authService.resendPhoneOtp(phone, containerId);
+  };
+
   const registerUser = async (data: { name: string; phone: string; email: string; zone: string; password?: string }) => {
     const user = await authService.registerJoiner(data);
     setUserProfile({
@@ -587,6 +645,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       totalHotels: 0,
       totalOrders: 0
     });
+    setCurrentScreen('DASHBOARD');
   };
 
   const loginUser = async (identifier: string, password?: string) => {
@@ -602,6 +661,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
       totalHotels: 0,
       totalOrders: 0
     });
+    setCurrentScreen('DASHBOARD');
   };
 
   const logoutUser = async () => {
@@ -609,7 +669,7 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     setUserProfile({
       uid: '',
       name: '',
-      role: 'joiner',
+      role: 'Hotel Joiner',
       zone: '',
       phone: '',
       email: '',
@@ -620,6 +680,8 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
     setHotels([]);
     setOrders([]);
     setSelectedHotel(null);
+    setCart([]);
+    setLastPlacedOrder(null);
     setCurrentScreen('LOGIN');
   };
 
@@ -667,6 +729,9 @@ export const JoinerAppProvider: React.FC<{ children: ReactNode }> = ({ children 
         commissionBalance,
         commissionHistory,
         userProfile,
+        sendPhoneOtp,
+        verifyPhoneOtp,
+        resendPhoneOtp,
         registerUser,
         loginUser,
         logoutUser,

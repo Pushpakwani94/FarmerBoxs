@@ -16,7 +16,12 @@ import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 
 const MobileScreenRouter: React.FC = () => {
-  const { currentScreen } = useJoinerApp();
+  const { currentScreen, userProfile } = useJoinerApp();
+
+  // Strict route protection: unauthenticated users cannot view dashboard or private screens
+  if (!userProfile.uid && currentScreen !== 'WELCOME' && currentScreen !== 'LOGIN' && currentScreen !== 'REGISTER') {
+    return <LoginScreen />;
+  }
 
   switch (currentScreen) {
     case 'WELCOME':
@@ -48,7 +53,7 @@ const MobileScreenRouter: React.FC = () => {
     case 'PROFILE':
       return <ProfileScreen />;
     default:
-      return <DashboardScreen />;
+      return userProfile.uid ? <DashboardScreen /> : <LoginScreen />;
   }
 };
 
