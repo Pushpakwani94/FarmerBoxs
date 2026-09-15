@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { MapPin, Building2, Users, ShoppingBag, BarChart3, Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, Phone, CheckCircle2, X } from 'lucide-react';
+import { MapPin, Building2, Users, ShoppingBag, BarChart3, Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, Phone, CheckCircle2, X, Shield } from 'lucide-react';
 import type { Zone } from '../types';
 
 export const ZonesPage: React.FC = () => {
@@ -229,9 +229,16 @@ export const ZonesPage: React.FC = () => {
                         }`}
                       >
                         <td className="py-2.5 px-2 font-medium text-slate-500">{zone.id}</td>
-                        <td className="py-2.5 px-2 font-bold text-slate-800 flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100" />
-                          {zone.name}
+                        <td className="py-2.5 px-2">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-600 fill-emerald-100 shrink-0" />
+                            <span>{zone.name}</span>
+                            {zone.addedBy === 'Admin' && (
+                              <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold">
+                                Admin
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2.5 px-2 text-slate-500">{zone.areaLocations}</td>
                         <td className="py-2.5 px-2 text-center font-semibold text-slate-700">{stats.joinersCount}</td>
@@ -368,6 +375,11 @@ export const ZonesPage: React.FC = () => {
                       }`}>
                         {activeZone.status}
                       </span>
+                      {activeZone.addedBy === 'Admin' && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                          <Shield className="w-2.5 h-2.5 text-amber-600" /> Admin
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500">{activeZone.areaLocations}</p>
                   </div>

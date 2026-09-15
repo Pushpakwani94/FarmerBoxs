@@ -339,10 +339,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ordersThisMonth: 0,
       salesThisMonth: 0,
       status: status || 'Active',
-      color: '#38bdf8'
+      color: '#38bdf8',
+      addedBy: 'Admin',
+      createdBy: adminProfile.name || 'Super Admin'
     };
     await saveRecord('zones', newZone);
     setZones(prev => [newZone, ...prev]);
+    addNotification({
+      title: 'New Zone Added by Admin',
+      message: `Zone '${name}' created by Admin (${adminProfile.name || 'Super Admin'})`,
+      subtitle: `${name} • Added by Admin`,
+      userType: 'Admins',
+      status: 'Sent',
+      category: 'System',
+      iconType: 'system',
+      read: false
+    });
   };
 
   const updateZone = async (zoneId: number, data: Partial<Zone>) => {
@@ -380,10 +392,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       pendingAmount: 0,
       status: status || 'Active',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-      joinedDate: 'Just now'
+      joinedDate: 'Just now',
+      addedBy: 'Admin',
+      createdBy: adminProfile.name || 'Super Admin'
     };
     await saveRecord('joiners', newJoiner);
     setJoiners(prev => [newJoiner, ...prev]);
+    addNotification({
+      title: 'New Joiner Added by Admin',
+      message: `${name} onboarded by Admin in ${zone} Zone`,
+      subtitle: `${name} • Added by Admin`,
+      userType: 'Admins',
+      status: 'Sent',
+      category: 'System',
+      iconType: 'system',
+      read: false
+    });
   };
 
   const updateJoiner = async (joinerId: number, data: Partial<Joiner>) => {
@@ -425,14 +449,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ownerVal = hotelOrName.contactPerson || hotelOrName.ownerName || 'Owner';
       mobileVal = hotelOrName.phone || hotelOrName.mobile || '9876543210';
       zoneVal = hotelOrName.zone || 'Kharadi';
-      joinerVal = hotelOrName.joiner || 'Rahul Sharma';
+      joinerVal = hotelOrName.joiner || 'Admin';
       addressVal = hotelOrName.address || `${zoneVal}, Pune`;
     } else {
       nameVal = hotelOrName;
       ownerVal = ownerName || 'Owner';
       mobileVal = mobile || '9876543210';
       zoneVal = zone || 'Kharadi';
-      joinerVal = joiner || 'Rahul Sharma';
+      joinerVal = joiner || 'Admin';
       addressVal = `${zoneVal}, Pune`;
     }
 
@@ -443,7 +467,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       mobile: mobileVal,
       email: `${nameVal.toLowerCase().replace(/\s+/g, '')}@hotel.com`,
       zone: zoneVal,
-      joiner: joinerVal,
+      joiner: joinerVal || 'Admin',
+      assignedJoiner: joinerVal || 'Admin',
+      joinedBy: joinerVal === 'Admin' || !joinerVal ? 'Admin' : joinerVal,
+      addedBy: 'Admin',
+      createdBy: adminProfile.name || 'Super Admin',
       address: addressVal,
       totalOrders: 0,
       totalSpent: 0,
@@ -457,9 +485,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await saveRecord('hotels', newHotel);
     setHotels(prev => [newHotel, ...prev]);
     addNotification({
-      title: 'New Hotel Registered',
-      message: `${newHotel.name} registered in ${newHotel.zone} Zone`,
-      subtitle: `${newHotel.name} • ${newHotel.zone}`,
+      title: 'New Hotel Added by Admin',
+      message: `${newHotel.name} registered by Admin in ${newHotel.zone} Zone`,
+      subtitle: `${newHotel.name} • Added by Admin`,
       userType: 'Admins',
       status: 'Sent',
       category: 'Hotels',
@@ -507,10 +535,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       completedToday: 0,
       activeDeliveries: 0,
       onTimeRate: '100%',
+      addedBy: 'Admin',
+      createdBy: adminProfile.name || 'Super Admin',
       recentOrders: []
     };
     await saveRecord('drivers', newDriver);
     setDrivers(prev => [newDriver, ...prev]);
+    addNotification({
+      title: 'New Driver Added by Admin',
+      message: `${newDriver.name} onboarded by Admin`,
+      subtitle: `${newDriver.name} • Added by Admin`,
+      userType: 'Admins',
+      status: 'Sent',
+      category: 'System',
+      iconType: 'system',
+      read: false
+    });
   };
 
   const updateDriver = async (driverId: number, data: Partial<Driver>) => {
@@ -545,6 +585,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       minimumStock: prodData.minimumStock ?? 25,
       status: (prodData.status as any) || 'Active',
       addedOn: 'Just now',
+      addedBy: 'Admin',
+      createdBy: adminProfile.name || 'Super Admin',
       image: prodData.imageUrl || prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200',
       description: prodData.description || 'Fresh farm-sourced produce.',
       images: prodData.images || [prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200'],
@@ -555,6 +597,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await saveRecord('products', newProduct);
     setProducts(prev => [newProduct, ...prev]);
     setSelectedProduct(newProduct);
+    addNotification({
+      title: 'New Product Added by Admin',
+      message: `${newProduct.name} added by Admin with ${newProduct.stock} ${newProduct.unit} stock`,
+      subtitle: `${newProduct.name} • Added by Admin`,
+      userType: 'Admins',
+      status: 'Sent',
+      category: 'System',
+      iconType: 'product',
+      read: false
+    });
   };
 
   const updateProduct = async (productId: number, data: Partial<Product>) => {
@@ -585,7 +637,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       hotelName: orderData.hotelName || 'New Hotel',
       hotelImage: orderData.hotelImage || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100',
       zone: orderData.zone || 'Kharadi',
-      joiner: orderData.joiner || 'Rahul Patil',
+      joiner: orderData.joiner || 'Admin',
       amount: orderData.amount || 0,
       paymentMode: orderData.paymentMode || 'Online',
       paymentStatus: orderData.paymentStatus || 'Pending',
@@ -593,14 +645,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       status: orderData.status || 'Pending',
       commission: orderData.commission || 0,
       items: orderData.items || [],
+      addedBy: 'Admin',
+      createdBy: adminProfile.name || 'Super Admin',
       ...orderData
     };
     await saveRecord('orders', newOrder);
     setOrders(prev => [newOrder, ...prev]);
     addNotification({
-      title: 'New Order Received',
-      message: `${newOrder.hotelName} placed order #${newOrder.id} for ₹${newOrder.amount}`,
-      subtitle: `${newOrder.hotelName} • ₹${newOrder.amount}`,
+      title: 'New Order Created by Admin',
+      message: `Order #${newOrder.id} created by Admin for ${newOrder.hotelName}`,
+      subtitle: `${newOrder.hotelName} • Added by Admin`,
       userType: 'Admins',
       status: 'Sent',
       category: 'Orders',

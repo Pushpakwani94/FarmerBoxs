@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ShoppingBag, MapPin, User, Truck, Calendar, IndianRupee, CheckCircle2 } from 'lucide-react';
+import { X, ShoppingBag, MapPin, User, Truck, Calendar, IndianRupee, CheckCircle2, Shield } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { OrderStatus } from '../../types';
 
@@ -47,9 +47,14 @@ export const OrderDetailModal: React.FC = () => {
               </span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[11px]">Assigned Joiner</span>
+              <span className="text-slate-400 block text-[11px]">Assigned Joiner / Source</span>
               <span className="font-semibold text-slate-800 flex items-center gap-1 mt-0.5">
                 <User className="w-3.5 h-3.5 text-slate-500" /> {selectedOrder.joiner}
+                {selectedOrder.addedBy === 'Admin' && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold ml-1">
+                    <Shield className="w-2.5 h-2.5 text-amber-600" /> Admin
+                  </span>
+                )}
               </span>
             </div>
             <div>

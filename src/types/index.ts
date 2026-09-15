@@ -47,6 +47,8 @@ export interface Order {
   subtotal?: number;
   deliveryCharge?: number;
   discount?: number;
+  addedBy?: string;
+  createdBy?: string;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -61,6 +63,8 @@ export interface Zone {
   salesThisMonth: number;
   status: 'Active' | 'Inactive';
   color?: string;
+  addedBy?: string;
+  createdBy?: string;
   assignedJoinersList?: { name: string; hotelsCount: number; phone: string; status: 'Active' | 'Inactive' }[];
 }
 
@@ -94,6 +98,8 @@ export interface Joiner {
   status: 'Active' | 'Inactive';
   avatar: string;
   joinedDate: string;
+  addedBy?: string;
+  createdBy?: string;
   assignedHotelsList?: AssignedHotel[];
   performanceHistory?: { month: string; orders: number }[];
 }
@@ -122,6 +128,8 @@ export interface Driver {
   completedToday?: number;
   activeDeliveries?: number;
   onTimeRate?: string;
+  addedBy?: string;
+  createdBy?: string;
   recentOrders?: {
     id: string;
     hotelName: string;
@@ -143,6 +151,10 @@ export interface Hotel {
   zone: string;
   joiner: string;
   assignedJoiner?: string;
+  joinedBy?: string;
+  joinerId?: string;
+  addedBy?: string;
+  createdBy?: string;
   address: string;
   totalOrders: number;
   orders?: number;
@@ -172,6 +184,8 @@ export interface Product {
   minimumStock: number;
   status: 'Active' | 'Low Stock' | 'Out of Stock';
   addedOn?: string;
+  addedBy?: string;
+  createdBy?: string;
   description?: string;
   images?: string[];
   stockHistory?: { date: string; type: 'Stock In' | 'Stock Out'; qty: string; ref: string; user: string }[];

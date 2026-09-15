@@ -136,6 +136,13 @@ export const DriverDetailModal: React.FC<DriverDetailModalProps> = ({
                 {driver.emergencyContact || '9822114455'} (Family)
               </span>
             </div>
+
+            <div>
+              <span className="text-slate-400 block text-[11px]">Added By</span>
+              <span className="font-semibold text-amber-800 mt-0.5 inline-flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                <Shield className="w-2.5 h-2.5 text-amber-600" /> {driver.addedBy || driver.createdBy || 'Admin'}
+              </span>
+            </div>
           </div>
 
           {/* Recent Orders / Deliveries */}

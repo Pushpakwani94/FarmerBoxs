@@ -20,7 +20,8 @@ import {
   IndianRupee,
   History,
   ImagePlus,
-  CheckCircle2
+  CheckCircle2,
+  Shield
 } from 'lucide-react';
 import type { Product } from '../types';
 import { AddProductModal } from '../components/Modals/AddProductModal';
@@ -384,8 +385,17 @@ export const InventoryPage: React.FC = () => {
                             className="w-7 h-7 rounded-lg object-cover border border-slate-200 shrink-0"
                           />
                         </td>
-                        <td className="py-2.5 px-2 font-bold text-slate-800 hover:text-emerald-700 transition-colors">
-                          {p.name}
+                        <td className="py-2.5 px-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-800 hover:text-emerald-700 transition-colors">
+                              {p.name}
+                            </span>
+                            {p.addedBy === 'Admin' && (
+                              <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-bold">
+                                <Shield className="w-2 h-2 text-amber-600" /> Admin
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2.5 px-2 text-slate-600">{p.category}</td>
                         <td className="py-2.5 px-2 text-center font-medium text-slate-700">{p.unit}</td>
@@ -596,6 +606,13 @@ export const InventoryPage: React.FC = () => {
                 <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                   <span className="text-slate-400 block text-[10px] font-semibold">Minimum Stock</span>
                   <span className="font-bold text-slate-800">{activeProduct.minimumStock} {activeProduct.unit}</span>
+                </div>
+
+                <div className="bg-amber-50/60 p-2.5 rounded-xl border border-amber-100 col-span-2">
+                  <span className="text-amber-800/70 block text-[10px] font-semibold">Added By</span>
+                  <span className="font-bold text-amber-900 flex items-center gap-1">
+                    <Shield className="w-3 h-3 text-amber-600" /> {activeProduct.addedBy || activeProduct.createdBy || 'Admin'}
+                  </span>
                 </div>
               </div>
             </div>

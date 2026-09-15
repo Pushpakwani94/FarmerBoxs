@@ -23,7 +23,7 @@ import {
   Check,
   Building2,
   Clock,
-  UserCheck
+  Shield
 } from 'lucide-react';
 import type { OrderStatus, Order } from '../types';
 
@@ -452,7 +452,15 @@ export const OrdersPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-2 px-1.5 text-slate-600 whitespace-nowrap">{ord.zone}</td>
-                      <td className="py-2 px-1.5 text-slate-700 whitespace-nowrap font-medium">{ord.joiner}</td>
+                      <td className="py-2 px-1.5 text-slate-700 whitespace-nowrap font-medium">
+                        {ord.addedBy === 'Admin' || ord.joiner === 'Admin' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                            <Shield className="w-2.5 h-2.5 text-amber-600" /> Admin
+                          </span>
+                        ) : (
+                          ord.joiner || '—'
+                        )}
+                      </td>
                       <td className="py-2 px-1.5 text-right font-bold text-slate-900 whitespace-nowrap">
                         ₹{ord.amount.toLocaleString('en-IN')}
                       </td>
@@ -627,8 +635,17 @@ export const OrdersPage: React.FC = () => {
                   className="w-8 h-8 rounded-full object-cover border border-emerald-600"
                 />
                 <div className="text-left">
-                  <p className="font-bold text-xs text-slate-900">{activeOrder.joiner}</p>
-                  <p className="text-[10px] text-slate-400">Hotel Joiner</p>
+                  <p className="font-bold text-xs text-slate-900 flex items-center gap-1">
+                    {activeOrder.joiner}
+                    {activeOrder.addedBy === 'Admin' && (
+                      <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-bold">
+                        <Shield className="w-2.5 h-2.5 text-amber-600" /> Admin
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {activeOrder.addedBy === 'Admin' ? 'Created by Admin' : 'Hotel Joiner'}
+                  </p>
                 </div>
               </div>
             </div>

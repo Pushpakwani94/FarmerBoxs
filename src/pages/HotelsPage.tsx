@@ -18,7 +18,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Shield
 } from 'lucide-react';
 
 export const HotelsPage: React.FC = () => {
@@ -315,7 +316,15 @@ export const HotelsPage: React.FC = () => {
                       <td className="py-2.5 px-2 text-slate-700">{h.ownerName || '—'}</td>
                       <td className="py-2.5 px-2 text-slate-600">{h.mobile || '—'}</td>
                       <td className="py-2.5 px-2 text-slate-700 font-medium">{h.zone || '—'}</td>
-                      <td className="py-2.5 px-2 text-slate-600">{h.joiner || '—'}</td>
+                      <td className="py-2.5 px-2 text-slate-600">
+                        {h.addedBy === 'Admin' || h.joiner === 'Admin' || h.assignedJoiner === 'Admin' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                            <Shield className="w-2.5 h-2.5 text-amber-600" /> Admin
+                          </span>
+                        ) : (
+                          h.joiner || '—'
+                        )}
+                      </td>
                       <td className="py-2.5 px-2 text-center font-bold text-slate-800">{h.totalOrders ?? 0}</td>
                       <td className="py-2.5 px-2 text-center">
                         <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
@@ -473,7 +482,13 @@ export const HotelsPage: React.FC = () => {
                   <span>{activeHotel.address || 'Address not specified'}</span>
                 </p>
                 <p className="pl-5">
-                  Zone: <strong className="text-slate-800">{activeHotel.zone || 'Kharadi'}</strong> • Assigned Joiner: <strong className="text-slate-800">{activeHotel.joiner || 'Rahul Patil'}</strong>
+                  Zone: <strong className="text-slate-800">{activeHotel.zone || 'Kharadi'}</strong> • Assigned Joiner: <strong className="text-slate-800">{activeHotel.joiner || 'Admin'}</strong>
+                </p>
+                <p className="pl-5 flex items-center gap-1.5 pt-0.5">
+                  <span className="text-slate-400">Added By:</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                    <Shield className="w-2.5 h-2.5 text-amber-600" /> {activeHotel.addedBy || activeHotel.createdBy || 'Admin'}
+                  </span>
                 </p>
               </div>
 

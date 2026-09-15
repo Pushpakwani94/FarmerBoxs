@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Users, UserCheck, UserX, Building2, ShoppingBag, Plus, Search, Eye, Edit, Trash2, Phone, Mail, MapPin, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Users, UserCheck, UserX, Building2, ShoppingBag, Plus, Search, Eye, Edit, Trash2, Phone, Mail, MapPin, ChevronLeft, ChevronRight, X, Shield } from 'lucide-react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { Joiner } from '../types';
 import { JoinerHotelsModal } from '../components/Modals/JoinerHotelsModal';
@@ -210,6 +210,11 @@ export const JoinersPage: React.FC = () => {
                     <td className="py-2.5 px-2 font-bold text-slate-800 flex items-center gap-2">
                       <img src={j.avatar} alt={j.name} className="w-6 h-6 rounded-full object-cover" />
                       <span>{j.name}</span>
+                      {j.addedBy === 'Admin' && (
+                        <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold">
+                          <Shield className="w-2 h-2 text-amber-600" /> Admin
+                        </span>
+                      )}
                     </td>
                     <td className="py-2.5 px-2 text-slate-600">{j.mobile}</td>
                     <td className="py-2.5 px-2 text-slate-700 font-medium">{j.zone}</td>
@@ -321,6 +326,12 @@ export const JoinersPage: React.FC = () => {
                 <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-slate-400" /> {activeJoiner.mobile}</p>
                 <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-slate-400" /> {activeJoiner.email}</p>
                 <p className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {activeJoiner.zone} Zone</p>
+                <p className="flex items-center gap-2 pt-0.5">
+                  <span className="text-slate-400">Added By:</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                    <Shield className="w-2.5 h-2.5 text-amber-600" /> {activeJoiner.addedBy || activeJoiner.createdBy || 'Admin'}
+                  </span>
+                </p>
               </div>
 
               {/* Stats Grid */}

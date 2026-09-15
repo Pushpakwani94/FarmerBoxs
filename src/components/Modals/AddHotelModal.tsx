@@ -90,6 +90,7 @@ export const AddHotelModal: React.FC = () => {
                 onChange={e => setJoiner(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:outline-none"
               >
+                <option value="Admin">Admin (Direct HQ)</option>
                 {joiners.map(j => (
                   <option key={j.id} value={j.name}>{j.name}</option>
                 ))}
