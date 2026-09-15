@@ -1,5 +1,4 @@
 import {
-  getAuth,
   signInWithPhoneNumber,
   RecaptchaVerifier,
   type ConfirmationResult,
@@ -10,7 +9,7 @@ import {
   type User as FirebaseUser,
   type Auth
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './config';
 
 export interface AppUser {
@@ -64,7 +63,7 @@ export class AuthService {
             } else if (this.currentUser && this.currentUser.uid === fbUser.uid) {
               // Keep active profile in memory
             } else {
-              const cleanPhone = (fbUser.phoneNumber || '').replace('+91', '') || '';
+              const cleanPhone = (fbUser.phoneNumber || '').replace('+91', '').replace(/[^0-9]/g, '');
               const isSuperAdmin = (fbUser.email && fbUser.email.includes('admin')) || false;
               const defaultUser: AppUser = {
                 uid: fbUser.uid,
@@ -164,7 +163,7 @@ export class AuthService {
   }
 
   /**
-   * Helper to validate Indian mobile numbers
+   * Helper to validate Indian mobile numbers (+91XXXXXXXXXX)
    */
   public validateIndianPhoneNumber(phone: string): { isValid: boolean; formatted: string; clean: string; error?: string } {
     const clean = phone.replace(/[^0-9]/g, '');
@@ -177,53 +176,54 @@ export class AuthService {
     }
 
     if (!nationalNumber || nationalNumber.length !== 10) {
-      return { isValid: false, formatted: '', clean: nationalNumber, error: 'Mobile number must be exactly 10 digits' };
+      return { isValid: false, formatted: '', clean: nationalNumber, error: 'Please enter a valid 10-digit mobile number' };
     }
 
     if (!/^[6-9]\d{9}$/.test(nationalNumber)) {
-      return { isValid: false, formatted: '', clean: nationalNumber, error: 'Enter a valid Indian mobile number starting with 6, 7, 8, or 9' };
+      return { isValid: false, formatted: '', clean: nationalNumber, error: 'Mobile number must start with 6, 7, 8, or 9' };
     }
 
     return { isValid: true, formatted: `+91${nationalNumber}`, clean: nationalNumber };
   }
 
   /**
-   * Initialize or reuse RecaptchaVerifier
+   * Correctly initialize and prevent multiple RecaptchaVerifier instances
    */
   private getOrCreateRecaptchaVerifier(containerId: string = 'recaptcha-container'): RecaptchaVerifier {
     if (!this.authInstance) {
-      throw new Error('Firebase Authentication is not configured.');
+      throw new Error('Firebase Authentication is not configured. Check VITE_FIREBASE_* environment variables.');
     }
 
-    // Clean up previous instance if needed
+    // Clean up previous instance and DOM element to prevent "reCAPTCHA already rendered" error
     if (this.recaptchaVerifier) {
       try {
         this.recaptchaVerifier.clear();
       } catch (e) {
-        // ignore
+        console.warn('Notice clearing recaptcha verifier:', e);
       }
       this.recaptchaVerifier = null;
     }
 
-    const container = document.getElementById(containerId);
+    let container = document.getElementById(containerId);
     if (!container) {
-      // Create element dynamically if missing
-      const div = document.createElement('div');
-      div.id = containerId;
-      div.style.position = 'fixed';
-      div.style.bottom = '0';
-      div.style.right = '0';
-      div.style.zIndex = '9999';
-      document.body.appendChild(div);
+      container = document.createElement('div');
+      container.id = containerId;
+      container.style.position = 'fixed';
+      container.style.bottom = '0';
+      container.style.right = '0';
+      container.style.zIndex = '9999';
+      document.body.appendChild(container);
+    } else {
+      container.innerHTML = '';
     }
 
     this.recaptchaVerifier = new RecaptchaVerifier(this.authInstance, containerId, {
       size: 'invisible',
       callback: () => {
-        console.log('Firebase reCAPTCHA verified successfully');
+        console.log('Firebase reCAPTCHA verified');
       },
       'expired-callback': () => {
-        console.warn('Firebase reCAPTCHA response expired. Please retry.');
+        console.warn('Firebase reCAPTCHA response expired');
       }
     });
 
@@ -257,7 +257,6 @@ export class AuthService {
       };
     } catch (err: any) {
       console.error('Firebase signInWithPhoneNumber error:', err);
-      // Clean up verifier on failure so next attempt gets a fresh verifier
       if (this.recaptchaVerifier) {
         try {
           this.recaptchaVerifier.clear();
@@ -285,7 +284,7 @@ export class AuthService {
     }
 
     if (!this.confirmationResult) {
-      throw new Error('No active OTP request found. Please request a new OTP.');
+      throw new Error('No active OTP verification session. Please request a new OTP.');
     }
 
     try {
@@ -293,11 +292,11 @@ export class AuthService {
       const fbUser = userCredential.user;
       const cleanPhone = (fbUser.phoneNumber || enteredPhone).replace('+91', '').replace(/[^0-9]/g, '');
 
-      // 1. Check users/{uid} in Firestore
+      // 1. Check users/{uid} in Firestore - DO NOT overwrite if already exists
       let profile = await this.fetchUserProfile(fbUser.uid);
 
       if (!profile) {
-        // Create new joiner profile in Firestore
+        // Create new joiner profile in Firestore ONLY if it does not exist
         profile = {
           uid: fbUser.uid,
           name: optionalName || `Joiner ${cleanPhone.slice(-4)}`,
@@ -530,18 +529,20 @@ export class AuthService {
     const msg = err?.message || '';
 
     switch (code) {
+      case 'auth/configuration-not-found':
+        return 'Firebase Phone Authentication is not enabled in your Firebase Project console. To enable it: Go to Firebase Console -> Authentication -> Sign-in method tab -> Click "Phone" and toggle Enable -> Save. (You can also add test phone numbers under Phone provider like +919876543210 with OTP 123456).';
       case 'auth/invalid-phone-number':
-        return 'Invalid phone number. Please enter a 10-digit Indian mobile number.';
+        return 'Invalid phone number format. Please enter a 10-digit Indian mobile number.';
       case 'auth/missing-phone-number':
         return 'Phone number is required.';
       case 'auth/quota-exceeded':
-        return 'SMS quota exceeded for today. Please try again later or use password login.';
+        return 'SMS quota exceeded for today. Please try again later or use test phone credentials.';
       case 'auth/too-many-requests':
-        return 'Too many attempts. Please wait a moment before trying again.';
+        return 'Too many attempts. Please wait a few moments before trying again.';
       case 'auth/invalid-verification-code':
-        return 'Invalid OTP code. Please enter the correct 6-digit code received on your phone.';
+        return 'Invalid 6-digit OTP code entered. Please check your SMS and enter the correct code.';
       case 'auth/code-expired':
-        return 'This OTP code has expired. Please tap "Resend OTP" to get a new code.';
+        return 'The OTP verification code has expired. Please tap "Resend OTP Code" to get a new code.';
       case 'auth/missing-verification-code':
         return 'Please enter the 6-digit OTP code.';
       case 'auth/captcha-check-failed':
@@ -549,11 +550,11 @@ export class AuthService {
       case 'auth/network-request-failed':
         return 'Network connection error. Please check your internet connection.';
       case 'auth/user-disabled':
-        return 'This account has been disabled. Please contact support.';
+        return 'This account has been disabled. Please contact administrator.';
       case 'auth/operation-not-allowed':
-        return 'Phone authentication is not enabled in Firebase Console. Please enable Phone provider under Firebase Authentication -> Sign-in method.';
+        return 'Phone authentication is not enabled in Firebase Console. Please enable Phone provider under Firebase Console -> Authentication -> Sign-in method.';
       default:
-        return msg || 'Authentication failed. Please check your credentials and try again.';
+        return msg || 'Authentication request failed. Please check your network and try again.';
     }
   }
 }
