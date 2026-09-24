@@ -14,13 +14,21 @@ import { useApp } from '../context/AppContext';
 export const MetricCards: React.FC = () => {
   const { setActiveTab, hotels, joiners, zones, orders, isDatabaseConnected } = useApp();
 
-  const activeHotels = hotels.filter(h => h.status === 'Active').length;
-  const activeJoiners = joiners.filter(j => j.status === 'Active').length;
-  const activeZones = zones.filter(z => z.status === 'Active').length;
-  const pendingOrders = orders.filter(o => o.status === 'Pending').length;
-  const deliveredOrders = orders.filter(o => o.status === 'Delivered').length;
-  const totalSales = orders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
-  const totalCommission = deliveredOrders * 100;
+  const activeHotels = hotels.filter(h => (h.status || 'Active') === 'Active').length;
+  const activeJoiners = joiners.filter(j => (j.status || 'Active') === 'Active').length;
+  const activeZones = zones.filter(z => (z.status || 'Active') === 'Active').length;
+  const pendingOrders = orders.filter(o => o.status === 'Pending' || o.orderStatus === 'Pending' || o.status === 'Processing').length;
+  const deliveredOrders = orders.filter(o => o.status === 'Delivered' || o.orderStatus === 'Delivered').length;
+  const totalSales = orders.reduce((sum, o) => sum + (Number(o.amount || o.totalAmount) || 0), 0);
+  
+  const deliveredCommissionOrders = orders.filter(o => (o.status === 'Delivered' || o.orderStatus === 'Delivered'));
+  const totalCommission = deliveredCommissionOrders.reduce((sum, o) => {
+    const comm = Number(o.commission || 0);
+    if (comm > 0) return sum + comm;
+    const amt = Number(o.amount || o.totalAmount || 0);
+    if (amt >= 1500 || o.isBonusEligible) return sum + 100;
+    return sum + 100;
+  }, 0);
 
   const cards = [
     {
