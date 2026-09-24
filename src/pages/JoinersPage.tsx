@@ -82,13 +82,21 @@ export const JoinersPage: React.FC = () => {
     }
 
     const jName = (j.name || '').trim().toLowerCase();
-    const jIdStr = String(j.id || '');
+    const jIdStr = String(j.id || '').trim();
+    const jPhone = String(j.mobile || j.phone || '').trim();
 
     // Real hotels belonging to this joiner
     const liveHotels = hotels.filter(h => {
-      const hJoiner = (h.joiner || '').trim().toLowerCase();
-      const hJoinerId = String(h.joinerId || '');
-      return (jName && hJoiner === jName) || (jIdStr && hJoinerId === jIdStr);
+      const hJoiner = (h.joiner || h.assignedJoiner || '').trim().toLowerCase();
+      const hJoinerId = String(h.joinerId || '').trim();
+      const hJoinedBy = String(h.joinedBy || '').trim();
+      return (
+        (jName && hJoiner === jName) ||
+        (jIdStr && (hJoinerId === jIdStr || hJoinedBy === jIdStr)) ||
+        (jPhone && (hJoinerId.includes(jPhone) || hJoinedBy.includes(jPhone))) ||
+        (jName && hJoiner.includes(jName)) ||
+        (jName && jName.includes(hJoiner) && hJoiner.length > 2)
+      );
     });
 
     const hotelsCount = liveHotels.length > 0 ? liveHotels.length : (j.totalHotels || 0);
@@ -97,12 +105,15 @@ export const JoinersPage: React.FC = () => {
     const hotelNameSet = new Set(liveHotels.map(h => (h.name || '').trim().toLowerCase()));
     const liveOrders = orders.filter(o => {
       const oHotel = (o.hotelName || '').trim().toLowerCase();
-      const oJoiner = (o.joiner || '').trim().toLowerCase();
-      const oJoinerId = String(o.joinerId || '');
+      const oJoiner = (o.joiner || o.assignedJoiner || '').trim().toLowerCase();
+      const oJoinerId = String(o.joinerId || o.joinedBy || '').trim();
       return (
         (oHotel && hotelNameSet.has(oHotel)) ||
         (jName && oJoiner === jName) ||
-        (jIdStr && oJoinerId === jIdStr)
+        (jIdStr && oJoinerId === jIdStr) ||
+        (jPhone && oJoinerId.includes(jPhone)) ||
+        (jName && oJoiner.includes(jName)) ||
+        (jName && jName.includes(oJoiner) && oJoiner.length > 2)
       );
     });
 
@@ -126,14 +137,14 @@ export const JoinersPage: React.FC = () => {
     const term = searchTerm.trim().toLowerCase();
     return joiners.filter(j => {
       const name = (j.name || '').toLowerCase();
-      const mobile = String(j.mobile || '');
+      const mobile = String(j.mobile || j.phone || '');
       const code = (j.joinerCode || '').toLowerCase();
       const zone = (j.zone || '').toLowerCase();
-      const status = j.status || 'Active';
+      const status = (j.status || 'Active').toLowerCase();
 
       const matchesSearch = !term || name.includes(term) || mobile.includes(term) || code.includes(term) || zone.includes(term);
-      const matchesZone = selectedZoneFilter === 'All Zones' || zone === selectedZoneFilter.toLowerCase();
-      const matchesStatus = selectedStatusFilter === 'All Status' || status === selectedStatusFilter;
+      const matchesZone = selectedZoneFilter === 'All Zones' || zone === selectedZoneFilter.toLowerCase() || zone.includes(selectedZoneFilter.toLowerCase()) || selectedZoneFilter.toLowerCase().includes(zone);
+      const matchesStatus = selectedStatusFilter === 'All Status' || status === selectedStatusFilter.toLowerCase();
 
       return matchesSearch && matchesZone && matchesStatus;
     });
