@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../config';
 import type { Product } from '../../types';
+import { resolveProductImage } from '../../utils/productImages';
 
 const COLLECTION = 'products';
 
@@ -44,18 +45,23 @@ export const productService = {
           snapshot.forEach((d) => {
             const data = d.data();
             const idVal = typeof data.id === 'number' ? data.id : Number(d.id) || Date.now();
+            const pName = data.name || 'Unnamed Product';
+            const pCat = data.category || 'Vegetables';
+            const pImg = resolveProductImage(pName, pCat, data.imageUrl || data.image);
+
             products.push({
               ...data,
               id: idVal,
-              name: data.name || 'Unnamed Product',
-              category: data.category || 'Vegetables',
+              name: pName,
+              category: pCat,
               unit: data.unit || 'KG',
               purchasePrice: Number(data.purchasePrice ?? 30),
               salePrice: Number(data.salePrice ?? data.price ?? 45),
               stock: Number(data.stock ?? 100),
               minimumStock: Number(data.minimumStock ?? 25),
               status: data.status || 'Active',
-              image: data.imageUrl || data.image || '/products/fenugreek.jpg'
+              image: pImg,
+              images: data.images && data.images.length > 0 ? data.images.map((img: string) => resolveProductImage(pName, pCat, img)) : [pImg]
             } as Product);
           });
 
@@ -106,18 +112,23 @@ export const productService = {
   async add(product: Partial<Product>): Promise<number> {
     const id = typeof product.id === 'number' ? product.id : Date.now();
     const docId = String(id);
+    const pName = product.name || 'Unnamed Product';
+    const pCat = product.category || 'Vegetables';
+    const pImg = resolveProductImage(pName, pCat, product.image || (product as any).imageUrl);
+
     const newProduct: any = {
       ...product,
       id,
-      name: product.name || 'Unnamed Product',
-      category: product.category || 'Vegetables',
+      name: pName,
+      category: pCat,
       unit: product.unit || 'KG',
       purchasePrice: Number(product.purchasePrice ?? 30),
       salePrice: Number(product.salePrice ?? 45),
       stock: Number(product.stock ?? 100),
       minimumStock: Number(product.minimumStock ?? 25),
       status: product.status || 'Active',
-      image: product.image || '/products/fenugreek.jpg',
+      image: pImg,
+      images: product.images && product.images.length > 0 ? product.images : [pImg],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -139,10 +150,14 @@ export const productService = {
     const docId = String(id);
     if (isFirebaseConfigured() && db) {
       const docRef = doc(db, COLLECTION, docId);
-      await updateDoc(docRef, {
+      const updatePayload: any = {
         ...data,
         updatedAt: serverTimestamp()
-      });
+      };
+      if (data.name || data.image || data.category) {
+        updatePayload.image = resolveProductImage(data.name, data.category, data.image);
+      }
+      await updateDoc(docRef, updatePayload);
       // Verification read
       const verifySnap = await getDoc(docRef);
       if (!verifySnap.exists()) {

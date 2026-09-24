@@ -16,13 +16,23 @@ import {
   CreditCard,
   MessageSquare,
   Headphones,
-  FileQuestion
+  FileQuestion,
+  Sparkles
 } from 'lucide-react';
 import { useJoinerApp } from '../JoinerAppContext';
 import { MobileBottomNav } from '../components/MobileBottomNav';
 
 export const ProfileScreen: React.FC = () => {
-  const { userProfile, hotels, orders, setCurrentScreen, updateUserProfile, logoutUser } = useJoinerApp();
+  const {
+    userProfile,
+    hotels,
+    orders,
+    setCurrentScreen,
+    updateUserProfile,
+    logoutUser,
+    checkForAppUpdates,
+    appVersion
+  } = useJoinerApp();
 
   // Modals state
   const [activeModal, setActiveModal] = useState<'NONE' | 'EDIT_PROFILE' | 'BANK_DETAILS' | 'CHANGE_PASSWORD' | 'HELP_SUPPORT' | 'LOGOUT_CONFIRM'>('NONE');
@@ -273,20 +283,42 @@ export const ProfileScreen: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveModal('LOGOUT_CONFIRM')}
-            className="w-full p-3.5 flex items-center justify-between hover:bg-rose-50 text-rose-600 font-bold transition-colors cursor-pointer text-left"
+            onClick={checkForAppUpdates}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-emerald-50/60 transition-colors cursor-pointer text-left group"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-                <LogOut className="w-4 h-4" />
+            <div className="flex items-center gap-2.5 font-bold text-slate-700">
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 text-[#15803d] flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
               </div>
               <div>
-                <p className="text-xs font-extrabold text-rose-600">Logout</p>
-                <p className="text-[10px] text-rose-400 font-medium">Sign out of your account</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-extrabold text-slate-800">App Version & Updates</p>
+                  <span className="px-1.5 py-0.2 bg-emerald-100 text-[#15803d] text-[9.5px] font-black rounded-md">
+                    {appVersion}
+                  </span>
+                </div>
+                <p className="text-[10px] text-emerald-700 font-bold">Check for new releases & APK</p>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-rose-400" />
+            <span className="text-[11px] font-extrabold text-[#15803d] bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+              Check
+            </span>
           </button>
+        </div>
+
+        {/* Dedicated Single Logout Button */}
+        <div className="pt-2 space-y-2">
+          <button
+            onClick={() => setActiveModal('LOGOUT_CONFIRM')}
+            className="w-full py-3 px-4 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-black text-xs rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-rose-500/20 active:scale-[0.99] transition-all cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout Account</span>
+          </button>
+
+          <p className="text-center text-[10px] text-slate-400 font-semibold">
+            FarmerBox Mobile Joiner App • {appVersion}
+          </p>
         </div>
       </div>
 

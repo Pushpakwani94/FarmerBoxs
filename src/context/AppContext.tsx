@@ -19,6 +19,8 @@ import {
   clearLocalDummyCache
 } from '../firebase/dbService';
 import { db, isFirebaseConfigured } from '../firebase/config';
+import { authService } from '../firebase/authService';
+import { resolveProductImage } from '../utils/productImages';
 
 export interface AdminProfile {
   name: string;
@@ -67,6 +69,11 @@ interface AppContextType {
   selectedDriver: Driver | null;
   setSelectedDriver: (driver: Driver | null) => void;
 
+  // Authentication & Session
+  isAdminLoggedIn: boolean;
+  loginAdmin: (email: string, password?: string) => Promise<boolean>;
+  logoutAdmin: () => void;
+
   // Modals
   isAddHotelOpen: boolean;
   setIsAddHotelOpen: (open: boolean) => void;
@@ -84,6 +91,8 @@ interface AppContextType {
   setIsOrderDetailModalOpen: (open: boolean) => void;
   isAdminProfileOpen: boolean;
   setIsAdminProfileOpen: (open: boolean) => void;
+  isLogoutConfirmOpen: boolean;
+  setIsLogoutConfirmOpen: (open: boolean) => void;
 
   // Admin Profile
   adminProfile: AdminProfile;
@@ -98,8 +107,8 @@ interface AppContextType {
   updateZone: (zoneId: number, data: Partial<Zone>) => void;
   deleteZone: (zoneId: number) => void;
   addJoiner: (name: string, mobile: string, zone: string, email?: string, status?: 'Active' | 'Inactive') => void;
-  updateJoiner: (joinerId: number, data: Partial<Joiner>) => void;
-  deleteJoiner: (joinerId: number) => void;
+  updateJoiner: (joinerId: number | string, data: Partial<Joiner>) => void;
+  deleteJoiner: (joinerId: number | string) => void;
   addHotel: (
     nameOrData: string | { name: string; contactPerson?: string; ownerName?: string; phone?: string; mobile?: string; zone: string; joiner: string; address?: string; status?: 'Active' | 'Inactive' },
     owner?: string,
@@ -118,30 +127,42 @@ interface AppContextType {
   addOrder: (order: Partial<Order>) => void;
   deleteOrder: (orderId: string) => void;
   addPayment: (payment: Partial<PaymentTransaction>) => void;
+  deletePayment: (paymentId: number | string) => void;
   addNotification: (notification: Partial<NotificationItem>) => void;
   deleteNotification: (id: number | string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+import {
+  initialOrders,
+  initialZones,
+  initialJoiners,
+  initialHotels,
+  initialPayments,
+  initialNotifications
+} from '../mockData';
+import { initialDriversList } from '../data/driversData';
+import { initialProductsList } from '../data/productsData';
+
+// Clean all legacy local caches from previous sessions
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const isConnected = isFirebaseConfigured();
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
-  // Clean all legacy local caches from previous sessions
   useEffect(() => {
     clearLocalDummyCache();
   }, []);
 
-  // Primary application state — starts completely empty and loads ONLY from Cloud Firestore
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [joiners, setJoiners] = useState<Joiner[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [hotels, setHotels] = useState<Hotel[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [payments, setPayments] = useState<PaymentTransaction[]>([]);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  // Primary application state — initialized with core data and synchronized live with Cloud Firestore
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [zones, setZones] = useState<Zone[]>(initialZones);
+  const [joiners, setJoiners] = useState<Joiner[]>(initialJoiners);
+  const [drivers, setDrivers] = useState<Driver[]>(initialDriversList);
+  const [hotels, setHotels] = useState<Hotel[]>(initialHotels);
+  const [products, setProducts] = useState<Product[]>(initialProductsList);
+  const [payments, setPayments] = useState<PaymentTransaction[]>(initialPayments);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications);
 
   // Subscriptions strictly to Cloud Firestore
   useEffect(() => {
@@ -149,50 +170,88 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setFirestoreError(err.message || 'Firestore connection error');
     };
 
-    const unsubOrders = subscribeToCollection<Order>('orders', setOrders, handleErr);
+    const unsubOrders = subscribeToCollection<Order>('orders', (data) => {
+      if (data && data.length > 0) setOrders(data);
+    }, handleErr);
 
     const unsubZones = subscribeToCollection<Zone>('zones', (z) => {
-      setZones(z);
-      setSelectedZone(prev => prev ? (z.find(item => String(item.id) === String(prev.id)) || z[0] || null) : (z[0] || null));
+      const data = z && z.length > 0 ? z : initialZones;
+      setZones(data);
+      setSelectedZone(prev => prev ? (data.find(item => String(item.id) === String(prev.id)) || data[0] || null) : (data[0] || null));
     }, handleErr);
 
     const unsubJoiners = subscribeToCollection<Joiner>('joiners', (j) => {
-      setJoiners(j);
-      setSelectedJoiner(prev => prev ? (j.find(item => String(item.id) === String(prev.id)) || j[0] || null) : (j[0] || null));
+      const data = j && j.length > 0 ? j : initialJoiners;
+      setJoiners(data);
+      setSelectedJoiner(prev => prev ? (data.find(item => String(item.id) === String(prev.id)) || data[0] || null) : (data[0] || null));
     }, handleErr);
 
     const unsubDrivers = subscribeToCollection<Driver>('drivers', (d) => {
-      setDrivers(d);
-      setSelectedDriver(prev => prev ? (d.find(item => String(item.id) === String(prev.id)) || d[0] || null) : (d[0] || null));
+      const data = d && d.length > 0 ? d : initialDriversList;
+      setDrivers(data);
+      setSelectedDriver(prev => prev ? (data.find(item => String(item.id) === String(prev.id)) || data[0] || null) : (data[0] || null));
     }, handleErr);
 
     const unsubHotels = subscribeToCollection<Hotel>('hotels', (h) => {
-      setHotels(h);
-      setSelectedHotel(prev => prev ? (h.find(item => String(item.id) === String(prev.id)) || h[0] || null) : (h[0] || null));
+      const data = h && h.length > 0 ? h : initialHotels;
+      setHotels(data);
+      setSelectedHotel(prev => prev ? (data.find(item => String(item.id) === String(prev.id)) || h[0] || null) : (h[0] || null));
     }, handleErr);
 
     const unsubProducts = subscribeToCollection<Product>('products', (p) => {
-      setProducts(p);
-      setSelectedProduct(prev => prev ? (p.find(item => String(item.id) === String(prev.id)) || p[0] || null) : (p[0] || null));
+      const data = p && p.length > 0 ? p : initialProductsList;
+      const initialMap = new Map(initialProductsList.map(item => [item.id, item]));
+      const normalized = data.map(item => {
+        const initialMatch = initialMap.get(item.id);
+        const nameLower = (item.name || '').toLowerCase();
+        const unitLower = (item.unit || '').toLowerCase();
+
+        let catalog: 'B2C' | 'B2B' | 'Both' = initialMatch?.catalogType || item.catalogType || item.targetCatalog || 'Both';
+        if (nameLower.startsWith('b2b') || unitLower.includes('bag (50') || unitLower.includes('sack')) {
+          catalog = 'B2B';
+        } else if (item.category === 'Fruits' || item.category === 'Citrus & Melons' || item.category === 'Vegetables' || item.category === 'Root Veggies' || item.category === 'Leafy Greens' || item.category === 'Exotic Veggies' || item.category === 'Herbs & Seasoning') {
+          // Fresh produce and all fruits are dual-channel: available in both B2C and B2B
+          catalog = 'Both';
+        }
+
+        return {
+          ...item,
+          catalogType: catalog,
+          targetCatalog: catalog,
+          b2bPrice: item.b2bPrice ?? initialMatch?.b2bPrice ?? item.salePrice,
+          b2cPrice: item.b2cPrice ?? initialMatch?.b2cPrice ?? item.salePrice,
+          minOrderQty: item.minOrderQty ?? initialMatch?.minOrderQty ?? 1,
+          image: resolveProductImage(item.name, item.category, item.image || (item as any).imageUrl),
+          images: (item.images && item.images.length > 0)
+            ? item.images.map(img => resolveProductImage(item.name, item.category, img))
+            : [resolveProductImage(item.name, item.category, item.image || (item as any).imageUrl)]
+        };
+      });
+      setProducts(normalized);
+      setSelectedProduct(prev => prev ? (normalized.find(item => String(item.id) === String(prev.id)) || normalized[0] || null) : (normalized[0] || null));
     }, handleErr);
 
-    const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', setPayments, handleErr);
+    const unsubPayments = subscribeToCollection<PaymentTransaction>('payments', (data) => {
+      if (data && data.length > 0) setPayments(data);
+    }, handleErr);
 
     const unsubNotifs = subscribeToCollection<any>('notifications', (rawNotifs) => {
-      const normalized: NotificationItem[] = (rawNotifs || []).map((n: any) => ({
-        id: n.id !== undefined && n.id !== null ? n.id : Date.now(),
-        title: n.title || 'Notification',
-        message: n.message || n.subtitle || 'No details provided',
-        subtitle: n.subtitle || n.message || '',
-        userType: n.userType || n.category || 'All Users',
-        status: n.status || 'Sent',
-        dateTime: n.dateTime || n.time || new Date().toLocaleString(),
-        time: n.time || n.dateTime || 'Just now',
-        read: Boolean(n.read),
-        category: n.category || 'System',
-        iconType: n.iconType || 'system'
-      }));
-      setNotifications(normalized);
+      if (rawNotifs && rawNotifs.length > 0) {
+        const normalized: NotificationItem[] = rawNotifs.map((n: any) => ({
+          id: n.id !== undefined && n.id !== null ? n.id : Date.now(),
+          title: n.title || 'Notification',
+          message: n.message || n.subtitle || 'No details provided',
+          subtitle: n.subtitle || n.message || '',
+          userType: n.userType || n.category || 'All Users',
+          status: n.status || 'Sent',
+          dateTime: n.dateTime || n.time || new Date().toLocaleString(),
+          time: n.time || n.dateTime || 'Just now',
+          read: Boolean(n.read),
+          category: n.category || 'System',
+          iconType: n.iconType || 'system'
+        }));
+        setNotifications(normalized);
+      }
     }, handleErr);
 
     return () => {
@@ -216,6 +275,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
 
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = localStorage.getItem('farmerbox_admin_logged_in');
+    return stored === null ? true : stored === 'true';
+  });
+
   const [isAddHotelOpen, setIsAddHotelOpen] = useState(false);
   const [isAddJoinerOpen, setIsAddJoinerOpen] = useState(false);
   const [isAddZoneOpen, setIsAddZoneOpen] = useState(false);
@@ -224,6 +289,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isOrderDetailModalOpen, setIsOrderDetailModalOpen] = useState(false);
   const [isAdminProfileOpen, setIsAdminProfileOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  const loginAdmin = async (email: string, password?: string): Promise<boolean> => {
+    const user = await authService.loginWithPhoneOrEmail(email, password, 'admin');
+    if (!user || user.role !== 'admin') {
+      throw new Error('Access denied. Only authorized administrators can log in to FarmerBox Admin Panel.');
+    }
+    setIsAdminLoggedIn(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('farmerbox_admin_logged_in', 'true');
+      localStorage.setItem('farmerbox_admin_email', user.email);
+    }
+    return true;
+  };
+
+  const logoutAdmin = () => {
+    setIsAdminLoggedIn(false);
+    setIsLogoutConfirmOpen(false);
+    setIsAdminProfileOpen(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('farmerbox_admin_logged_in', 'false');
+    }
+  };
 
   // Admin Profile stored in Firestore 'settings/admin_profile'
   const [adminProfile, setAdminProfile] = useState<AdminProfile>({
@@ -296,32 +384,81 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     const existing = orders.find(o => String(o.id) === String(orderId));
     if (existing) {
+      const orderAmount = Number(existing.amount || existing.totalAmount || 0);
+      const isEligibleBonus = orderAmount >= 1500;
+      const commissionAmount = newStatus === 'Delivered' ? (isEligibleBonus ? 100 : Number(existing.commission || 0)) : Number(existing.commission || 0);
+
       const updated = {
         ...existing,
         status: newStatus,
         orderStatus: newStatus,
-        commission: newStatus === 'Delivered' ? 100 : existing.commission
+        isBonusEligible: isEligibleBonus,
+        bonusAmount: isEligibleBonus ? 100 : 0,
+        bonusStatus: newStatus === 'Delivered' ? (isEligibleBonus ? 'Approved & Credited to Wallet' : 'Not Eligible') : (isEligibleBonus ? 'Pending Delivery Approval' : 'Not Eligible'),
+        commission: commissionAmount
       };
       await saveRecord('orders', updated);
+
+      // If delivery is approved and marked 'Delivered' for an order >= 1500, credit ₹100 to the Joiner's wallet
+      if (newStatus === 'Delivered' && isEligibleBonus && existing.joiner) {
+        const joinerName = existing.joiner;
+        const targetJoiner = joiners.find(j => 
+          j.name.toLowerCase() === joinerName.toLowerCase() || 
+          String(j.id) === String(existing.joinerId || '')
+        );
+
+        if (targetJoiner) {
+          const newTotalEarnings = (targetJoiner.totalEarnings || 0) + 100;
+          const newCommissionEarned = (targetJoiner.commissionEarned || 0) + 100;
+          const updatedJoiner = {
+            ...targetJoiner,
+            totalEarnings: newTotalEarnings,
+            commissionEarned: newCommissionEarned,
+            walletBalance: ((targetJoiner as any).walletBalance || 0) + 100
+          };
+
+          setJoiners(prev => prev.map(j => String(j.id) === String(targetJoiner.id) ? updatedJoiner : j));
+          await saveRecord('joiners', updatedJoiner, String(targetJoiner.id));
+        }
+
+        // Notify Joiner of the ₹100 Wallet Bonus credit
+        addNotification({
+          title: `₹100 Wallet Bonus Credited! 🎉`,
+          message: `Order #${orderId} (₹${orderAmount.toLocaleString('en-IN')}) delivered to ${existing.hotelName} has been approved by Admin. ₹100 added to your Joiner Wallet!`,
+          subtitle: `${existing.hotelName} • ₹100 Wallet Bonus Added`,
+          userType: 'Joiners',
+          status: 'Sent',
+          category: 'Commission',
+          iconType: 'commission',
+          read: false
+        });
+      }
+
       addNotification({
         title: `Order #${orderId} ${newStatus}`,
         message: `Order status changed to ${newStatus} for ${existing.hotelName}`,
         subtitle: `${existing.hotelName} • ${newStatus}`,
-        userType: 'Admins',
+        userType: 'All Users',
         status: 'Sent',
         category: 'Orders',
         iconType: 'order',
         read: false
       });
     }
+
     setOrders(prev =>
       prev.map(ord => {
         if (String(ord.id) === String(orderId)) {
+          const amt = Number(ord.amount || ord.totalAmount || 0);
+          const isEligibleBonus = amt >= 1500;
           return {
             ...ord,
             status: newStatus,
             orderStatus: newStatus,
-            commission: newStatus === 'Delivered' ? 100 : ord.commission
+            isBonusEligible: isEligibleBonus,
+            bonusAmount: isEligibleBonus ? 100 : 0,
+            bonusStatus: newStatus === 'Delivered' ? (isEligibleBonus ? 'Approved & Credited to Wallet' : 'Not Eligible') : (isEligibleBonus ? 'Pending Delivery Approval' : 'Not Eligible'),
+            commission: newStatus === 'Delivered' ? (isEligibleBonus ? 100 : Number(ord.commission || 0)) : Number(ord.commission || 0)
           };
         }
         return ord;
@@ -370,21 +507,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteZone = async (zoneId: number) => {
-    await deleteRecord('zones', zoneId);
     setZones(prev => prev.filter(z => z.id !== zoneId));
     if (selectedZone && selectedZone.id === zoneId) {
-      setSelectedZone(null);
+      const remaining = zones.filter(z => z.id !== zoneId);
+      setSelectedZone(remaining.length > 0 ? remaining[0] : null);
+    }
+    try {
+      await deleteRecord('zones', zoneId);
+    } catch (e) {
+      console.warn('Could not delete zone from firestore:', e);
     }
   };
 
   const addJoiner = async (name: string, mobile: string, zone: string, email?: string, status?: 'Active' | 'Inactive') => {
+    const newId = Date.now();
+    const formattedCode = `JN${String(joiners.length + 1).padStart(3, '0')}`;
     const newJoiner: Joiner = {
-      id: Date.now(),
-      joinerCode: `JN0${joiners.length + 1}`,
-      name,
-      mobile,
-      email: email || `${name.toLowerCase().replace(/\s+/g, '')}@email.com`,
-      zone,
+      id: newId,
+      joinerCode: formattedCode,
+      name: name.trim(),
+      mobile: mobile.trim(),
+      email: (email || `${name.trim().toLowerCase().replace(/\s+/g, '')}@farmerbox.in`).trim(),
+      zone: zone || 'Kharadi',
       totalHotels: 0,
       totalOrders: 0,
       totalEarnings: 0,
@@ -396,8 +540,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addedBy: 'Admin',
       createdBy: adminProfile.name || 'Super Admin'
     };
-    await saveRecord('joiners', newJoiner);
-    setJoiners(prev => [newJoiner, ...prev]);
+
+    // Immediate optimistic state update
+    setJoiners(prev => [newJoiner, ...prev.filter(j => String(j.id) !== String(newId))]);
+    setSelectedJoiner(newJoiner);
+
+    try {
+      await saveRecord('joiners', newJoiner, String(newId));
+    } catch (e) {
+      console.warn('Could not persist joiner to firestore:', e);
+    }
+
     addNotification({
       title: 'New Joiner Added by Admin',
       message: `${name} onboarded by Admin in ${zone} Zone`,
@@ -410,23 +563,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const updateJoiner = async (joinerId: number, data: Partial<Joiner>) => {
-    const existing = joiners.find(j => j.id === joinerId);
+  const updateJoiner = async (joinerId: number | string, data: Partial<Joiner>) => {
+    const existing = joiners.find(j => String(j.id) === String(joinerId));
+    const oldName = existing?.name;
+
+    // Immediate optimistic update
+    setJoiners(prev => prev.map(j => String(j.id) === String(joinerId) ? { ...j, ...data } : j));
+    if (selectedJoiner && String(selectedJoiner.id) === String(joinerId)) {
+      setSelectedJoiner(prev => (prev ? { ...prev, ...data } : null));
+    }
+
+    // If joiner name updated, cascade to associated hotels
+    if (data.name && oldName && data.name !== oldName) {
+      setHotels(prev => prev.map(h => {
+        if (h.joiner === oldName || h.assignedJoiner === oldName) {
+          return { ...h, joiner: data.name!, assignedJoiner: data.name! };
+        }
+        return h;
+      }));
+    }
+
     if (existing) {
       const updated = { ...existing, ...data };
-      await saveRecord('joiners', updated);
-    }
-    setJoiners(prev => prev.map(j => j.id === joinerId ? { ...j, ...data } : j));
-    if (selectedJoiner && selectedJoiner.id === joinerId) {
-      setSelectedJoiner(prev => (prev ? { ...prev, ...data } : null));
+      try {
+        await saveRecord('joiners', updated, String(joinerId));
+      } catch (e) {
+        console.warn('Could not update joiner in firestore:', e);
+      }
     }
   };
 
-  const deleteJoiner = async (joinerId: number) => {
-    await deleteRecord('joiners', joinerId);
-    setJoiners(prev => prev.filter(j => j.id !== joinerId));
-    if (selectedJoiner && selectedJoiner.id === joinerId) {
-      setSelectedJoiner(null);
+  const deleteJoiner = async (joinerId: number | string) => {
+    // Immediate optimistic update
+    setJoiners(prev => prev.filter(j => String(j.id) !== String(joinerId)));
+    if (selectedJoiner && String(selectedJoiner.id) === String(joinerId)) {
+      const remaining = joiners.filter(j => String(j.id) !== String(joinerId));
+      setSelectedJoiner(remaining.length > 0 ? remaining[0] : null);
+    }
+
+    try {
+      await deleteRecord('joiners', joinerId);
+    } catch (e) {
+      console.warn('Could not delete joiner from firestore:', e);
     }
   };
 
@@ -508,11 +686,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const deleteHotel = async (hotelId: number) => {
-    await deleteRecord('hotels', hotelId);
-    setHotels(prev => prev.filter(h => h.id !== hotelId));
-    if (selectedHotel && selectedHotel.id === hotelId) {
-      setSelectedHotel(null);
+  const deleteHotel = async (hotelId: number | string) => {
+    setHotels(prev => prev.filter(h => String(h.id) !== String(hotelId)));
+    if (selectedHotel && String(selectedHotel.id) === String(hotelId)) {
+      const remaining = hotels.filter(h => String(h.id) !== String(hotelId));
+      setSelectedHotel(remaining.length > 0 ? remaining[0] : null);
+    }
+    try {
+      await deleteRecord('hotels', hotelId);
+    } catch (e) {
+      console.warn('Could not delete hotel from firestore:', e);
     }
   };
 
@@ -539,7 +722,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       createdBy: adminProfile.name || 'Super Admin',
       recentOrders: []
     };
-    await saveRecord('drivers', newDriver);
+    try {
+      await saveRecord('drivers', newDriver);
+    } catch (e) {
+      console.warn('Could not save driver to firestore:', e);
+    }
     setDrivers(prev => [newDriver, ...prev]);
     addNotification({
       title: 'New Driver Added by Admin',
@@ -553,48 +740,70 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const updateDriver = async (driverId: number, data: Partial<Driver>) => {
-    const existing = drivers.find(d => d.id === driverId);
+  const updateDriver = async (driverId: number | string, data: Partial<Driver>) => {
+    const existing = drivers.find(d => String(d.id) === String(driverId));
+    setDrivers(prev => prev.map(d => (String(d.id) === String(driverId) ? { ...d, ...data } : d)));
+    if (selectedDriver && String(selectedDriver.id) === String(driverId)) {
+      setSelectedDriver(prev => (prev ? { ...prev, ...data } : null));
+    }
     if (existing) {
       const updated = { ...existing, ...data };
-      await saveRecord('drivers', updated);
-    }
-    setDrivers(prev => prev.map(d => (d.id === driverId ? { ...d, ...data } : d)));
-    if (selectedDriver && selectedDriver.id === driverId) {
-      setSelectedDriver(prev => (prev ? { ...prev, ...data } : null));
+      try {
+        await saveRecord('drivers', updated);
+      } catch (e) {
+        console.warn('Could not update driver in firestore:', e);
+      }
     }
   };
 
-  const deleteDriver = async (driverId: number) => {
-    await deleteRecord('drivers', driverId);
-    setDrivers(prev => prev.filter(d => d.id !== driverId));
-    if (selectedDriver && selectedDriver.id === driverId) {
-      setSelectedDriver(null);
+  const deleteDriver = async (driverId: number | string) => {
+    setDrivers(prev => prev.filter(d => String(d.id) !== String(driverId)));
+    if (selectedDriver && String(selectedDriver.id) === String(driverId)) {
+      const remaining = drivers.filter(d => String(d.id) !== String(driverId));
+      setSelectedDriver(remaining.length > 0 ? remaining[0] : null);
+    }
+    try {
+      await deleteRecord('drivers', driverId);
+    } catch (e) {
+      console.warn('Could not delete driver from firestore:', e);
     }
   };
 
   const addProduct = async (prodData: Partial<Product>) => {
+    const resolvedImg = resolveProductImage(prodData.name, prodData.category, prodData.imageUrl || prodData.image);
     const newProduct: Product = {
       id: Date.now(),
       name: prodData.name || 'New Vegetable',
+      catalogType: prodData.catalogType || prodData.targetCatalog || 'B2C',
+      targetCatalog: prodData.catalogType || prodData.targetCatalog || 'B2C',
       category: prodData.category || 'Vegetables',
       unit: prodData.unit || 'KG',
-      purchasePrice: prodData.purchasePrice || 30,
-      salePrice: prodData.salePrice || 45,
-      stock: prodData.stock ?? 100,
-      minimumStock: prodData.minimumStock ?? 25,
+      purchasePrice: Number(prodData.purchasePrice) || 30,
+      salePrice: Number(prodData.salePrice) || 45,
+      b2bPrice: Number(prodData.b2bPrice) || Number(prodData.salePrice) || 45,
+      b2cPrice: Number(prodData.b2cPrice) || Number(prodData.salePrice) || 45,
+      minOrderQty: Number(prodData.minOrderQty) || 1,
+      stock: Number(prodData.stock) ?? 100,
+      minimumStock: Number(prodData.minimumStock) ?? 25,
       status: (prodData.status as any) || 'Active',
       addedOn: 'Just now',
       addedBy: 'Admin',
       createdBy: adminProfile.name || 'Super Admin',
-      image: prodData.imageUrl || prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200',
-      description: prodData.description || 'Fresh farm-sourced produce.',
-      images: prodData.images || [prodData.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200'],
+      isImported: prodData.isImported,
+      originCountry: prodData.originCountry,
+      countryFlag: prodData.countryFlag,
+      image: resolvedImg,
+      description: prodData.description || `Fresh farm-sourced ${prodData.name || 'produce'} direct from trusted growers.`,
+      images: prodData.images && prodData.images.length > 0 ? prodData.images : [resolvedImg],
       stockHistory: [
         { date: 'Today', type: 'Stock In', qty: `+${prodData.stock ?? 100} ${prodData.unit || 'KG'}`, ref: `PO-${Date.now().toString().slice(-4)}`, user: 'Admin' }
       ]
     };
-    await saveRecord('products', newProduct);
+    try {
+      await saveRecord('products', newProduct);
+    } catch (e) {
+      console.warn('Could not save product to firestore:', e);
+    }
     setProducts(prev => [newProduct, ...prev]);
     setSelectedProduct(newProduct);
     addNotification({
@@ -609,23 +818,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const updateProduct = async (productId: number, data: Partial<Product>) => {
-    const existing = products.find(p => p.id === productId);
+  const updateProduct = async (productId: number | string, data: Partial<Product>) => {
+    const existing = products.find(p => String(p.id) === String(productId));
     if (existing) {
-      const updated = { ...existing, ...data };
-      await saveRecord('products', updated);
-    }
-    setProducts(prev => prev.map(p => (p.id === productId ? { ...p, ...data } : p)));
-    if (selectedProduct && selectedProduct.id === productId) {
-      setSelectedProduct(prev => (prev ? { ...prev, ...data } : null));
+      const resolvedImg = data.image ? resolveProductImage(data.name || existing.name, data.category || existing.category, data.image) : existing.image;
+      const updated = { ...existing, ...data, image: resolvedImg };
+      setProducts(prev => prev.map(p => (String(p.id) === String(productId) ? updated : p)));
+      if (selectedProduct && String(selectedProduct.id) === String(productId)) {
+        setSelectedProduct(updated);
+      }
+      try {
+        await saveRecord('products', updated);
+      } catch (e) {
+        console.warn('Could not update product in firestore:', e);
+      }
+    } else {
+      setProducts(prev => prev.map(p => (String(p.id) === String(productId) ? { ...p, ...data } : p)));
     }
   };
 
-  const deleteProduct = async (productId: number) => {
-    await deleteRecord('products', productId);
-    setProducts(prev => prev.filter(p => p.id !== productId));
-    if (selectedProduct && selectedProduct.id === productId) {
-      setSelectedProduct(products.find(p => p.id !== productId) || null);
+  const deleteProduct = async (productId: number | string) => {
+    setProducts(prev => prev.filter(p => String(p.id) !== String(productId)));
+    if (selectedProduct && String(selectedProduct.id) === String(productId)) {
+      const remaining = products.filter(p => String(p.id) !== String(productId));
+      setSelectedProduct(remaining.length > 0 ? remaining[0] : null);
+    }
+    try {
+      await deleteRecord('products', productId);
+    } catch (e) {
+      console.warn('Could not delete product from firestore:', e);
     }
   };
 
@@ -649,7 +870,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       createdBy: adminProfile.name || 'Super Admin',
       ...orderData
     };
-    await saveRecord('orders', newOrder);
+    try {
+      await saveRecord('orders', newOrder);
+    } catch (e) {
+      console.warn('Could not save order to firestore:', e);
+    }
     setOrders(prev => [newOrder, ...prev]);
     addNotification({
       title: 'New Order Created by Admin',
@@ -664,10 +889,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteOrder = async (orderId: string) => {
-    await deleteRecord('orders', orderId);
-    setOrders(prev => prev.filter(o => String(o.id) !== String(orderId)));
-    if (selectedOrder && String(selectedOrder.id) === String(orderId)) {
+    setOrders(prev => prev.filter(o => String(o.id) !== String(orderId) && String(o.orderId || '') !== String(orderId)));
+    if (selectedOrder && (String(selectedOrder.id) === String(orderId) || String(selectedOrder.orderId || '') === String(orderId))) {
       setSelectedOrder(null);
+    }
+    try {
+      await deleteRecord('orders', orderId);
+    } catch (e) {
+      console.warn('Could not delete order from firestore:', e);
     }
   };
 
@@ -684,8 +913,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       paymentMode: paymentData.paymentMode || 'Online',
       ...paymentData
     };
-    await saveRecord('payments', newPayment);
+    try {
+      await saveRecord('payments', newPayment);
+    } catch (e) {
+      console.warn('Could not save payment to firestore:', e);
+    }
     setPayments(prev => [newPayment, ...prev]);
+  };
+
+  const deletePayment = async (paymentId: number | string) => {
+    setPayments(prev => prev.filter(p => String(p.id) !== String(paymentId)));
+    try {
+      await deleteRecord('payments', paymentId);
+    } catch (e) {
+      console.warn('Could not delete payment from firestore:', e);
+    }
   };
 
   const addNotification = async (notifData: Partial<NotificationItem>) => {
@@ -711,13 +953,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       iconType: notifData.iconType || 'system',
       ...notifData
     };
-    await saveRecord('notifications', newNotif, docId);
+    try {
+      await saveRecord('notifications', newNotif, docId);
+    } catch (e) {
+      console.warn('Could not save notification to firestore:', e);
+    }
     setNotifications(prev => [newNotif, ...prev.filter(n => String(n.id) !== docId)]);
   };
 
   const deleteNotification = async (id: number | string) => {
-    await deleteRecord('notifications', id);
     setNotifications(prev => prev.filter(n => String(n.id) !== String(id)));
+    try {
+      await deleteRecord('notifications', id);
+    } catch (e) {
+      console.warn('Could not delete notification from firestore:', e);
+    }
   };
 
   return (
@@ -730,6 +980,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         hotels,
         products,
         payments,
+        deletePayment,
         notifications,
         isDatabaseConnected: isConnected,
         firestoreError,
@@ -748,6 +999,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSelectedProduct,
         selectedDriver,
         setSelectedDriver,
+        isAdminLoggedIn,
+        loginAdmin,
+        logoutAdmin,
         isAddHotelOpen,
         setIsAddHotelOpen,
         isAddJoinerOpen,
@@ -764,6 +1018,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsOrderDetailModalOpen,
         isAdminProfileOpen,
         setIsAdminProfileOpen,
+        isLogoutConfirmOpen,
+        setIsLogoutConfirmOpen,
         adminProfile,
         updateAdminProfile,
         markNotificationsAsRead,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, CheckCircle2, IndianRupee, Send, ShieldCheck, Building2, Smartphone } from 'lucide-react';
 import type { JoinerCommissionRecord } from '../../data/commissionData';
 
@@ -6,7 +6,7 @@ interface MakePayoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   joiner: JoinerCommissionRecord | null;
-  onPaymentSuccess: (joinerId: number, amount: number, mode: string, txnId: string) => void;
+  onPaymentSuccess: (joinerId: number | string, amount: number, mode: string, txnId: string) => void;
 }
 
 export const MakePayoutModal: React.FC<MakePayoutModalProps> = ({
@@ -15,19 +15,31 @@ export const MakePayoutModal: React.FC<MakePayoutModalProps> = ({
   joiner,
   onPaymentSuccess
 }) => {
-  if (!isOpen || !joiner) return null;
-
-  const [amount, setAmount] = useState<number>(joiner.pendingAmount > 0 ? joiner.pendingAmount : (joiner.commission - joiner.paidAmount > 0 ? joiner.commission - joiner.paidAmount : 5000));
+  const [amount, setAmount] = useState<number>(500);
   const [paymentMode, setPaymentMode] = useState<'UPI' | 'Bank Transfer' | 'Cash / Wallet'>('UPI');
   const [txnRef, setTxnRef] = useState<string>(`PAY${Math.floor(100000 + Math.random() * 900000)}`);
   const [note, setNote] = useState<string>('Commission settlement for delivered orders');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  useEffect(() => {
+    if (joiner && isOpen) {
+      const defaultAmt = (joiner.pendingAmount && joiner.pendingAmount > 0)
+        ? joiner.pendingAmount
+        : (joiner.commission - joiner.paidAmount > 0 ? joiner.commission - joiner.paidAmount : 500);
+      setAmount(defaultAmt);
+      setTxnRef(`PAY${Math.floor(100000 + Math.random() * 900000)}`);
+      setIsSuccess(false);
+      setIsProcessing(false);
+    }
+  }, [joiner, isOpen]);
+
+  if (!isOpen || !joiner) return null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (amount <= 0) {
-      alert('Please enter a valid payout amount');
+    if (amount <= 0 || isNaN(amount)) {
+      alert('Please enter a valid payout amount (min ₹1)');
       return;
     }
 
@@ -35,12 +47,12 @@ export const MakePayoutModal: React.FC<MakePayoutModalProps> = ({
     setTimeout(() => {
       setIsProcessing(false);
       setIsSuccess(true);
+      onPaymentSuccess(joiner.id, amount, paymentMode, txnRef);
       setTimeout(() => {
-        onPaymentSuccess(joiner.id, amount, paymentMode, txnRef);
         setIsSuccess(false);
         onClose();
-      }, 1200);
-    }, 800);
+      }, 900);
+    }, 400);
   };
 
   return (
@@ -113,28 +125,26 @@ export const MakePayoutModal: React.FC<MakePayoutModalProps> = ({
                   className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-800 focus:outline-emerald-600"
                 />
               </div>
-              <div className="flex items-center gap-2 mt-1.5">
-                <button
-                  type="button"
-                  onClick={() => setAmount(joiner.pendingAmount > 0 ? joiner.pendingAmount : 5000)}
-                  className="text-[11px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 font-medium"
-                >
-                  Full Pending (₹{joiner.pendingAmount.toLocaleString('en-IN')})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAmount(5000)}
-                  className="text-[11px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 font-medium"
-                >
-                  ₹5,000
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAmount(10000)}
-                  className="text-[11px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 font-medium"
-                >
-                  ₹10,000
-                </button>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {joiner.pendingAmount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(joiner.pendingAmount)}
+                    className="text-[10px] px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 rounded text-emerald-900 font-bold"
+                  >
+                    Full Pending (₹{joiner.pendingAmount.toLocaleString('en-IN')})
+                  </button>
+                )}
+                {[500, 1000, 2000, 5000].map(val => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setAmount(val)}
+                    className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 font-semibold"
+                  >
+                    ₹{val.toLocaleString('en-IN')}
+                  </button>
+                ))}
               </div>
             </div>
 

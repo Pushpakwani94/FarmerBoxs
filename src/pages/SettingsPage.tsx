@@ -595,7 +595,7 @@ export const SettingsPage: React.FC = () => {
                   <span className="font-bold text-slate-900">{drivers.length} docs</span>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
-                  <span className="text-slate-600 font-medium">Products Catalog</span>
+                  <span className="text-slate-600 font-medium">Products Catalog (B2B & B2C)</span>
                   <span className="font-bold text-slate-900">{products.length} docs</span>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
@@ -1081,7 +1081,7 @@ export const SettingsPage: React.FC = () => {
                   required
                   value={newUserName}
                   onChange={e => setNewUserName(e.target.value)}
-                  placeholder="e.g. Rahul Patil"
+                  placeholder="Enter full name"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-emerald-600"
                 />
               </div>

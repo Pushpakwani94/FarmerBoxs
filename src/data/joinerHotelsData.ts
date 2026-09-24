@@ -1,6 +1,6 @@
 import type { AssignedHotel, Joiner } from '../types';
 
-export const rahulPatil45Hotels: AssignedHotel[] = [
+export const verifiedPuneHotels: AssignedHotel[] = [
   { id: 1, name: 'Hotel Spice Villa', location: 'Kharadi', owner: 'Vikram Deshmukh', phone: '9823011223', orders: 14, joinedDate: '15 Jan 2024', status: 'Active' },
   { id: 2, name: 'Hotel Grand Food', location: 'Kharadi', owner: 'Suresh Mane', phone: '9823022334', orders: 15, joinedDate: '18 Jan 2024', status: 'Active' },
   { id: 3, name: 'Hotel Green Leaf', location: 'Mundhwa', owner: 'Rajesh Shinde', phone: '9823033445', orders: 12, joinedDate: '22 Jan 2024', status: 'Active' },
@@ -62,21 +62,26 @@ const puneHotelNames = [
 
 /**
  * Returns the complete list of hotels onboarded/joined by a given joiner.
- * If the joiner is Rahul Patil, returns the full verified 45 hotels list.
- * For other joiners, dynamically returns their exact count of assigned hotels.
  */
-export const getHotelsForJoiner = (joiner: Joiner): AssignedHotel[] => {
-  if (joiner.name === 'Rahul Patil' || joiner.id === 1) {
-    return rahulPatil45Hotels;
-  }
+export const getHotelsForJoiner = (joiner?: Joiner | null): AssignedHotel[] => {
+  if (!joiner) return [];
 
   // If already populated with sufficient items, return it
-  if (joiner.assignedHotelsList && joiner.assignedHotelsList.length >= joiner.totalHotels) {
-    return joiner.assignedHotelsList;
+  if (joiner.assignedHotelsList && joiner.assignedHotelsList.length >= (joiner.totalHotels || 0) && joiner.assignedHotelsList.length > 0) {
+    return joiner.assignedHotelsList.map((h, i) => ({
+      id: i + 1,
+      name: h.name,
+      location: h.location || joiner.zone || 'Pune',
+      owner: (h as any).owner || 'Hotel Manager',
+      phone: (h as any).phone || `98230${String(10000 + i).slice(-5)}`,
+      orders: (h as any).orders || 8,
+      joinedDate: (h as any).joinedDate || '2024-02-01',
+      status: h.status || 'Active'
+    }));
   }
 
   // Generate dynamic realistic hotels list matching joiner.totalHotels
-  const count = joiner.totalHotels || 15;
+  const count = Math.max(1, joiner.totalHotels || 15);
   const list: AssignedHotel[] = [];
   const baseAvgOrders = Math.floor((joiner.totalOrders || 100) / count) || 5;
 

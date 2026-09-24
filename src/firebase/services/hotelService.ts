@@ -36,7 +36,7 @@ export const hotelService = {
           const hotels: Hotel[] = [];
           snapshot.forEach((d) => {
             const data = d.data();
-            const idVal = typeof data.id === 'number' ? data.id : Number(d.id) || Date.now();
+            const idVal = data.id !== undefined ? data.id : d.id;
             hotels.push({
               ...data,
               id: idVal,
@@ -46,7 +46,7 @@ export const hotelService = {
               mobile: data.mobile || data.phone || '9876543210',
               email: data.email || 'hotel@farmerbox.com',
               zone: data.zone || 'Kharadi',
-              joiner: data.joiner || data.assignedJoiner || 'Rahul Patil',
+              joiner: data.joiner || data.assignedJoiner || '',
               joinedBy: data.joinedBy || data.joinerId || '',
               joinerId: data.joinerId || data.joinedBy || '',
               address: data.address || '',
@@ -77,12 +77,22 @@ export const hotelService = {
     }
   },
 
-  subscribeForJoiner(uid: string, onUpdate: (hotels: Hotel[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  subscribeForJoiner(
+    joinerOrUid: string | { uid: string; name?: string; zone?: string; phone?: string },
+    onUpdate: (hotels: Hotel[]) => void,
+    onError?: (error: Error) => void
+  ): Unsubscribe {
     if (!isFirebaseConfigured() || !db) {
       if (onError) onError(new Error('Firebase Firestore is not configured.'));
       onUpdate([]);
       return () => {};
     }
+
+    const uid = typeof joinerOrUid === 'string' ? joinerOrUid : (joinerOrUid?.uid || '');
+    const name = typeof joinerOrUid === 'object' ? (joinerOrUid?.name || '').trim().toLowerCase() : '';
+    const zone = typeof joinerOrUid === 'object' ? (joinerOrUid?.zone || '').trim().toLowerCase().replace(' zone', '') : '';
+    const phone = typeof joinerOrUid === 'object' ? (joinerOrUid?.phone || '').replace(/[^0-9]/g, '').slice(-10) : '';
+    const cleanUid = uid.replace(/[^0-9]/g, '').slice(-10);
 
     try {
       const colRef = collection(db, COLLECTION);
@@ -99,9 +109,35 @@ export const hotelService = {
             const data = d.data();
             const joinedBy = String(data.joinedBy || data.joinerId || '');
             const joinerId = String(data.joinerId || data.joinedBy || '');
-            // Enforce user-level isolation: Joiner sees ONLY hotels where joinedBy == currentUser.uid
-            if (joinedBy === uid || joinerId === uid) {
-              const idVal = typeof data.id === 'number' ? data.id : Number(d.id) || Date.now();
+            const assignedJoiner = String(data.assignedJoiner || data.joiner || '').trim().toLowerCase();
+            const hotelZone = String(data.zone || '').trim().toLowerCase().replace(' zone', '');
+            const hotelPhone = String(data.joinerPhone || data.phone || data.mobile || '').replace(/[^0-9]/g, '').slice(-10);
+            const addedBy = String(data.addedBy || '');
+
+            const matchesUid = Boolean(
+              uid && (
+                joinedBy === uid ||
+                joinerId === uid ||
+                (cleanUid && cleanUid.length >= 6 && (joinedBy.includes(cleanUid) || joinerId.includes(cleanUid)))
+              )
+            );
+            const matchesName = Boolean(
+              name && name.length >= 2 && (
+                assignedJoiner === name ||
+                assignedJoiner.includes(name) ||
+                name.includes(assignedJoiner) ||
+                String(data.joiner || '').toLowerCase().includes(name)
+              )
+            );
+            const matchesPhone = Boolean(
+              phone && phone.length >= 6 && hotelPhone && (hotelPhone === phone || hotelPhone.includes(phone) || phone.includes(hotelPhone))
+            );
+            const matchesAdminZone = (addedBy === 'Admin' || joinedBy === 'Admin' || !joinedBy) &&
+              (!zone || zone === 'all' || zone === 'all zones (hq)' || hotelZone === zone || hotelZone.includes(zone) || zone.includes(hotelZone) || assignedJoiner === 'admin' || assignedJoiner === 'all' || !hotelZone);
+
+            // Hotel matches if directly created by joiner, assigned by name/phone, or published by Admin in the joiner's zone
+            if (matchesUid || matchesName || matchesPhone || matchesAdminZone) {
+              const idVal = data.id !== undefined ? data.id : d.id;
               hotels.push({
                 ...data,
                 id: idVal,
@@ -111,7 +147,7 @@ export const hotelService = {
                 mobile: data.mobile || data.phone || '9876543210',
                 email: data.email || 'hotel@farmerbox.com',
                 zone: data.zone || 'Kharadi',
-                joiner: data.joiner || data.assignedJoiner || 'Rahul Patil',
+                joiner: data.joiner || data.assignedJoiner || '',
                 joinedBy: joinedBy,
                 joinerId: joinerId,
                 address: data.address || '',

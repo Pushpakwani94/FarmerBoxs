@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Users } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -6,23 +6,34 @@ export const AddJoinerModal: React.FC = () => {
   const { isAddJoinerOpen, setIsAddJoinerOpen, addJoiner, zones } = useApp();
 
   const [name, setName] = useState('');
-  const [zone, setZone] = useState(zones[0]?.name || 'Kharadi');
+  const [zone, setZone] = useState('Kharadi');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+
+  useEffect(() => {
+    if (zones.length > 0) {
+      if (!zone || !zones.some(z => z.name === zone)) {
+        setZone(zones[0].name);
+      }
+    }
+  }, [zones]);
 
   if (!isAddJoinerOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone) {
-      alert('Please enter joiner name and phone.');
+    if (!name.trim() || !phone.trim()) {
+      alert('Please enter joiner name and phone number.');
       return;
     }
+    const cleanZone = zone || (zones[0]?.name || 'Kharadi');
+    const cleanEmail = email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@farmerbox.in`;
+
     addJoiner(
       name.trim(),
       phone.trim(),
-      zone,
-      email.trim() || `${name.toLowerCase().replace(/\s+/g, '.')}@farmerbox.in`,
+      cleanZone,
+      cleanEmail,
       'Active'
     );
     setIsAddJoinerOpen(false);
@@ -72,8 +83,8 @@ export const AddJoinerModal: React.FC = () => {
               onChange={e => setZone(e.target.value)}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-600 focus:outline-none font-medium text-slate-700"
             >
-              {zones.map(z => (
-                <option key={z.id} value={z.name}>{z.name}</option>
+              {Array.from(new Set([...zones.map(z => z.name), 'Kharadi', 'Shivajinagar', 'Viman Nagar', 'Hinjawadi', 'Baner', 'Hadapsar', 'Aundh', 'Kothrud', 'Wakad', 'Magarpatta', 'Pimple Saudagar', 'Pimple Chinchwad'])).map(zoneName => (
+                <option key={zoneName} value={zoneName}>{zoneName}</option>
               ))}
             </select>
           </div>

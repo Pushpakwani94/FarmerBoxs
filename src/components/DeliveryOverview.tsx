@@ -5,16 +5,10 @@ import { useApp } from '../context/AppContext';
 export const DeliveryOverview: React.FC = () => {
   const { setActiveTab, drivers, orders, isDatabaseConnected } = useApp();
 
-  const totalDrivers = isDatabaseConnected ? drivers.length : 45;
-  const availableDrivers = isDatabaseConnected
-    ? drivers.filter(d => d.status === 'Active').length
-    : 12;
-  const outForDelivery = isDatabaseConnected
-    ? orders.filter(o => o.status === 'Out for Delivery').length
-    : 18;
-  const completedToday = isDatabaseConnected
-    ? orders.filter(o => o.status === 'Delivered').length
-    : 35;
+  const totalDrivers = drivers.length;
+  const availableDrivers = drivers.filter(d => (d.status || 'Active') === 'Active').length;
+  const outForDelivery = orders.filter(o => o.status === 'Out for Delivery').length;
+  const completedToday = orders.filter(o => o.status === 'Delivered').length;
 
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between h-full">

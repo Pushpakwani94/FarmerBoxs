@@ -43,8 +43,8 @@ export const orderService = {
               hotelId: data.hotelId,
               hotelName: data.hotelName || 'Partner Hotel',
               zone: data.zone || data.hotelZone || 'Kharadi',
-              joiner: data.joiner || 'Rahul Patil',
-              joinerId: data.joinerId || 'JN01',
+              joiner: data.joiner || data.assignedJoiner || '',
+              joinerId: data.joinerId || '',
               date: data.date || 'Today',
               time: data.time || '10:00 AM',
               amount: Number(data.totalAmount ?? data.amount ?? 0),
@@ -77,12 +77,22 @@ export const orderService = {
     }
   },
 
-  subscribeForJoiner(uid: string, onUpdate: (orders: Order[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  subscribeForJoiner(
+    joinerOrUid: string | { uid: string; name?: string; zone?: string; phone?: string },
+    onUpdate: (orders: Order[]) => void,
+    onError?: (error: Error) => void
+  ): Unsubscribe {
     if (!isFirebaseConfigured() || !db) {
       if (onError) onError(new Error('Firebase Firestore is not configured.'));
       onUpdate([]);
       return () => {};
     }
+
+    const uid = typeof joinerOrUid === 'string' ? joinerOrUid : (joinerOrUid?.uid || '');
+    const name = typeof joinerOrUid === 'object' ? (joinerOrUid?.name || '').trim().toLowerCase() : '';
+    const zone = typeof joinerOrUid === 'object' ? (joinerOrUid?.zone || '').trim().toLowerCase().replace(' zone', '') : '';
+    const phone = typeof joinerOrUid === 'object' ? (joinerOrUid?.phone || '').replace(/[^0-9]/g, '').slice(-10) : '';
+    const cleanUid = uid.replace(/[^0-9]/g, '').slice(-10);
 
     try {
       const colRef = collection(db, COLLECTION);
@@ -98,8 +108,33 @@ export const orderService = {
           snapshot.forEach((d) => {
             const data = d.data();
             const joinerId = String(data.joinerId || data.joinedBy || '');
-            // Enforce user-level isolation: Joiner sees ONLY their own orders
-            if (joinerId === uid) {
+            const orderJoiner = String(data.joiner || data.assignedJoiner || '').trim().toLowerCase();
+            const orderZone = String(data.zone || data.hotelZone || '').trim().toLowerCase().replace(' zone', '');
+            const orderPhone = String(data.joinerPhone || data.phone || data.mobile || '').replace(/[^0-9]/g, '').slice(-10);
+            const addedBy = String(data.addedBy || '');
+
+            const matchesUid = Boolean(
+              uid && (
+                joinerId === uid ||
+                String(data.joinedBy || '') === uid ||
+                (cleanUid && cleanUid.length >= 6 && (joinerId.includes(cleanUid) || String(data.joinedBy || '').includes(cleanUid)))
+              )
+            );
+            const matchesPhone = Boolean(
+              phone && phone.length >= 6 && orderPhone && (orderPhone === phone || orderPhone.includes(phone) || phone.includes(orderPhone))
+            );
+            const matchesName = Boolean(
+              name && name.length >= 2 && (
+                orderJoiner === name ||
+                (name.length >= 3 && orderJoiner.includes(name)) ||
+                (orderJoiner.length >= 3 && name.includes(orderJoiner))
+              )
+            );
+            const matchesAdminZone = (addedBy === 'Admin' || !joinerId || joinerId === 'Admin') &&
+              (!zone || zone === 'all' || zone === 'all zones (hq)' || orderZone === zone || orderZone.includes(zone) || zone.includes(orderZone) || orderJoiner === 'admin' || orderJoiner === 'all' || !orderZone);
+
+            // Order matches if placed by joiner, assigned to joiner, or created/updated by Admin in the joiner's zone
+            if (matchesUid || matchesPhone || matchesName || matchesAdminZone) {
               orders.push({
                 ...data,
                 id: String(data.id || data.orderId || d.id),
@@ -107,7 +142,7 @@ export const orderService = {
                 hotelId: data.hotelId,
                 hotelName: data.hotelName || 'Partner Hotel',
                 zone: data.zone || data.hotelZone || 'Kharadi',
-                joiner: data.joiner || 'Rahul Patil',
+                joiner: data.joiner || data.assignedJoiner || '',
                 joinerId: joinerId,
                 date: data.date || 'Today',
                 time: data.time || '10:00 AM',

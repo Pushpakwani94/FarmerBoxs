@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">FarmerBox Joiner</string>
-    <string name="title_activity_main">FarmerBox Joiner</string>
+    <string name="app_name">FarmerBox</string>
+    <string name="title_activity_main">FarmerBox</string>
     <string name="package_name">com.farmerbox.joiner</string>
     <string name="custom_url_scheme">com.farmerbox.joiner</string>
 </resources>

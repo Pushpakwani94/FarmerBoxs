@@ -23,12 +23,13 @@ import {
   Check,
   Building2,
   Clock,
-  Shield
+  Shield,
+  Trash2
 } from 'lucide-react';
 import type { OrderStatus, Order } from '../types';
 
 export const OrdersPage: React.FC = () => {
-  const { orders, selectedOrder, setSelectedOrder, zones, joiners, drivers, hotels, setActiveTab, setSelectedHotel, isDatabaseConnected, addOrder } = useApp();
+  const { orders, selectedOrder, setSelectedOrder, zones, joiners, drivers, hotels, setActiveTab, setSelectedHotel, isDatabaseConnected, addOrder, deleteOrder } = useApp();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedZone, setSelectedZone] = useState('All Zones');
@@ -36,8 +37,9 @@ export const OrdersPage: React.FC = () => {
   const [selectedJoinerFilter, setSelectedJoinerFilter] = useState('All Joiners');
   const [selectedDriverFilter, setSelectedDriverFilter] = useState('All Drivers');
   const [statusFilter, setStatusFilter] = useState('All Status');
-  const [dateRange, setDateRange] = useState('11 Sep 2026 - 11 Sep 2026');
+  const [dateRange, setDateRange] = useState('All Time');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showTimeline, setShowTimeline] = useState(false);
   const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
@@ -52,7 +54,8 @@ export const OrdersPage: React.FC = () => {
     const matchesSearch =
       (o.hotelName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (o.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (o.joiner || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (o.joiner || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.driver || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesZone = selectedZone === 'All Zones' || o.zone === selectedZone;
     const matchesHotel = selectedHotelFilter === 'All Hotels' || o.hotelName === selectedHotelFilter;
     const matchesJoiner = selectedJoinerFilter === 'All Joiners' || o.joiner === selectedJoinerFilter;
@@ -61,11 +64,18 @@ export const OrdersPage: React.FC = () => {
     return matchesSearch && matchesZone && matchesHotel && matchesJoiner && matchesDriver && matchesStatus;
   });
 
-  const activeOrder: Order = selectedOrder || filteredOrders[0] || orders[0];
+  const totalFiltered = filteredOrders.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalFiltered);
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+
+  const activeOrder: Order = selectedOrder || paginatedOrders[0] || orders[0];
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedOrderIds(filteredOrders.map(o => o.id));
+      setSelectedOrderIds(paginatedOrders.map(o => o.id));
     } else {
       setSelectedOrderIds([]);
     }
@@ -86,6 +96,7 @@ export const OrdersPage: React.FC = () => {
     setSelectedJoinerFilter('All Joiners');
     setSelectedDriverFilter('All Drivers');
     setStatusFilter('All Status');
+    setDateRange('All Time');
     setCurrentPage(1);
   };
 
@@ -126,7 +137,7 @@ export const OrdersPage: React.FC = () => {
       hotelName: newHotelName || (hotelObj ? hotelObj.name : 'Hotel Guest'),
       hotelImage: hotelObj?.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100',
       zone: hotelObj?.zone || 'Kharadi',
-      joiner: hotelObj?.joiner || 'Rahul Sharma',
+      joiner: hotelObj?.joiner || 'Yash kolhe',
       amount: 1250,
       status: 'Pending',
       date: 'Today',
@@ -158,12 +169,12 @@ export const OrdersPage: React.FC = () => {
   const activeHotelObj = hotels.find(h => h.name.toLowerCase() === activeOrder?.hotelName.toLowerCase());
   const hotelImg = activeOrder?.hotelImage || activeHotelObj?.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100';
 
-  const totalOrdersCount = isDatabaseConnected ? orders.length : 1842;
-  const pendingOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Pending').length : 48;
-  const confirmedOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Confirmed' || o.status === 'Preparing').length : 125;
-  const outForDeliveryOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Out for Delivery').length : 68;
-  const deliveredOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Delivered').length : 1520;
-  const cancelledOrdersCount = isDatabaseConnected ? orders.filter(o => o.status === 'Cancelled').length : 81;
+  const totalOrdersCount = orders.length;
+  const pendingOrdersCount = orders.filter(o => o.status === 'Pending').length;
+  const confirmedOrdersCount = orders.filter(o => o.status === 'Confirmed' || o.status === 'Preparing').length;
+  const outForDeliveryOrdersCount = orders.filter(o => o.status === 'Out for Delivery').length;
+  const deliveredOrdersCount = orders.filter(o => o.status === 'Delivered').length;
+  const cancelledOrdersCount = orders.filter(o => o.status === 'Cancelled').length;
 
   return (
     <div className="p-5 max-w-[1600px] mx-auto space-y-4">
@@ -367,16 +378,33 @@ export const OrdersPage: React.FC = () => {
         <div className={`${showOrderDetailPanel ? 'lg:col-span-7' : 'lg:col-span-12'} bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 transition-all duration-200`}>
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-base text-slate-800">
-              Orders List (1,842)
+              Orders List ({totalFiltered})
             </h3>
-            <button
-              onClick={handleExportCSV}
-              className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
-              title="Export Orders CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Export</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedOrderIds.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete ${selectedOrderIds.length} selected orders?`)) {
+                      selectedOrderIds.forEach(id => deleteOrder(id));
+                      setSelectedOrderIds([]);
+                      setShowOrderDetailPanel(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Delete Selected ({selectedOrderIds.length})</span>
+                </button>
+              )}
+              <button
+                onClick={handleExportCSV}
+                className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                title="Export Orders CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Export</span>
+              </button>
+            </div>
           </div>
 
           {/* Orders Table */}
@@ -387,7 +415,7 @@ export const OrdersPage: React.FC = () => {
                   <th className="py-2.5 px-1.5 w-6 text-center">
                     <input
                       type="checkbox"
-                      checked={selectedOrderIds.length === filteredOrders.length && filteredOrders.length > 0}
+                      checked={selectedOrderIds.length === paginatedOrders.length && paginatedOrders.length > 0}
                       onChange={handleSelectAll}
                       className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                     />
@@ -407,14 +435,14 @@ export const OrdersPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredOrders.length === 0 ? (
+                {paginatedOrders.length === 0 ? (
                   <tr>
                     <td colSpan={13} className="py-8 text-center text-slate-400">
                       No matching orders found.
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((ord, idx) => (
+                  paginatedOrders.map((ord, idx) => (
                     <tr
                       key={ord.id}
                       onClick={() => {
@@ -433,7 +461,7 @@ export const OrdersPage: React.FC = () => {
                           className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                         />
                       </td>
-                      <td className="py-2 px-1.5 text-center font-medium text-slate-400">{idx + 1}</td>
+                      <td className="py-2 px-1.5 text-center font-medium text-slate-400">{startIndex + idx + 1}</td>
                       <td className="py-2 px-1.5 font-semibold text-sky-600 hover:underline whitespace-nowrap">
                         {ord.id}
                       </td>
@@ -462,7 +490,7 @@ export const OrdersPage: React.FC = () => {
                         )}
                       </td>
                       <td className="py-2 px-1.5 text-right font-bold text-slate-900 whitespace-nowrap">
-                        ₹{ord.amount.toLocaleString('en-IN')}
+                        ₹{Number(ord.amount || 0).toLocaleString('en-IN')}
                       </td>
                       <td className="py-2 px-1.5 text-center whitespace-nowrap">
                         <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
@@ -486,7 +514,7 @@ export const OrdersPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-2 px-1.5 text-right font-semibold text-slate-700 whitespace-nowrap">
-                        {ord.commission > 0 ? `₹${ord.commission}` : '-'}
+                        {Number(ord.commission || 0) > 0 ? `₹${ord.commission}` : '-'}
                       </td>
                       <td className="py-2 px-1.5 text-center" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
@@ -502,13 +530,17 @@ export const OrdersPage: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              setSelectedOrder(ord);
-                              setShowOrderDetailPanel(true);
+                              if (window.confirm(`Are you sure you want to delete Order #${ord.id}?`)) {
+                                deleteOrder(ord.id);
+                                if (activeOrder?.id === ord.id) {
+                                  setShowOrderDetailPanel(false);
+                                }
+                              }
                             }}
-                            className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 cursor-pointer"
-                            title="More Actions"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 cursor-pointer transition-colors"
+                            title="Delete Order"
                           >
-                            <MoreVertical className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                           </button>
                         </div>
                       </td>
@@ -521,22 +553,24 @@ export const OrdersPage: React.FC = () => {
 
           {/* Pagination Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between pt-2 text-xs text-slate-500 gap-3">
-            <span>Showing 1 to 10 of 1,842 orders</span>
+            <span>
+              Showing {totalFiltered > 0 ? startIndex + 1 : 0} to {endIndex} of {totalFiltered} orders
+            </span>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
                 <button
-                  disabled={currentPage === 1}
+                  disabled={safeCurrentPage <= 1}
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   className="p-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                {[1, 2, 3, 4, 5].map(p => (
+                {Array.from({ length: totalPages }, (_, i) => i + 1).slice(0, 5).map(p => (
                   <button
                     key={p}
                     onClick={() => setCurrentPage(p)}
                     className={`w-6 h-6 rounded flex items-center justify-center font-bold text-xs cursor-pointer ${
-                      currentPage === p
+                      safeCurrentPage === p
                         ? 'bg-emerald-700 text-white'
                         : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
@@ -544,25 +578,39 @@ export const OrdersPage: React.FC = () => {
                     {p}
                   </button>
                 ))}
-                <span className="px-1 text-slate-400">...</span>
+                {totalPages > 5 && (
+                  <>
+                    <span className="px-1 text-slate-400">...</span>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      className={`px-2 h-6 rounded border border-slate-200 font-medium text-xs cursor-pointer ${
+                        safeCurrentPage === totalPages ? 'bg-emerald-700 text-white' : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
                 <button
-                  onClick={() => setCurrentPage(185)}
-                  className="px-2 h-6 rounded border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium text-xs cursor-pointer"
-                >
-                  185
-                </button>
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(185, prev + 1))}
-                  className="p-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  className="p-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              <select className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-600 font-medium cursor-pointer">
-                <option>10 / page</option>
-                <option>25 / page</option>
-                <option>50 / page</option>
+              <select
+                value={pageSize}
+                onChange={e => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs text-slate-600 font-medium cursor-pointer"
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
               </select>
             </div>
           </div>
@@ -670,16 +718,46 @@ export const OrdersPage: React.FC = () => {
                     { id: 2, productName: 'Onion', qty: 20, unit: 'KG', price: 30, total: 600 },
                     { id: 3, productName: 'Potato', qty: 30, unit: 'KG', price: 25, total: 750 },
                     { id: 4, productName: 'Green Chili', qty: 10, unit: 'KG', price: 50, total: 500 }
-                  ]).map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/60">
-                      <td className="py-1.5 px-1 text-slate-400">{item.id}</td>
-                      <td className="py-1.5 px-1 font-semibold text-slate-800">{item.productName}</td>
-                      <td className="py-1.5 px-1 text-center text-slate-700">{item.qty}</td>
-                      <td className="py-1.5 px-1 text-center text-slate-500">{item.unit}</td>
-                      <td className="py-1.5 px-1 text-right text-slate-700">₹{item.price}</td>
-                      <td className="py-1.5 px-1 text-right font-bold text-slate-900">₹{item.total.toLocaleString('en-IN')}</td>
-                    </tr>
-                  ))}
+                  ]).map(item => {
+                    const n = (item.productName || '').toLowerCase();
+                    let itemImg = '/products/onion.jpg';
+                    if (n.includes('onion')) itemImg = '/products/onion.jpg';
+                    else if (n.includes('carrot') || n.includes('gajar')) itemImg = '/products/carrot.jpg';
+                    else if (n.includes('chili') || n.includes('chilli') || n.includes('mirch')) itemImg = '/products/greenchili.jpg';
+                    else if (n.includes('beetroot') || n.includes('chukandar')) itemImg = '/products/beetroot.jpg';
+                    else if (n.includes('ridge') || n.includes('turai') || n.includes('dodka')) itemImg = '/products/ridgegourd.jpg';
+                    else if (n.includes('cauliflower') || n.includes('gobi')) itemImg = '/products/cauliflower.jpg';
+                    else if (n.includes('brinjal') || n.includes('eggplant')) itemImg = '/products/brinjal.jpg';
+                    else if (n.includes('pumpkin') || n.includes('kaddu')) itemImg = '/products/pumpkin.jpg';
+                    else if (n.includes('methi') || n.includes('fenugreek')) itemImg = '/products/fenugreek.jpg';
+                    else if (n.includes('mint') || n.includes('pudina')) itemImg = '/products/mint.jpg';
+                    else if (n.includes('ginger') || n.includes('adrak')) itemImg = '/products/ginger.jpg';
+                    else if (n.includes('tomato')) itemImg = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=200';
+                    else if (n.includes('potato')) itemImg = 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=200';
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-1 text-slate-400 font-mono text-[11px]">{item.id}</td>
+                        <td className="py-2.5 px-1">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={itemImg}
+                              alt={item.productName}
+                              className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shrink-0 shadow-sm bg-white"
+                            />
+                            <div>
+                              <span className="font-extrabold text-slate-900 text-xs block">{item.productName}</span>
+                              <span className="text-[10px] text-slate-400">Fresh Produce</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-1 text-center font-bold text-slate-800">{item.qty}</td>
+                        <td className="py-2.5 px-1 text-center text-slate-500 font-medium">{item.unit}</td>
+                        <td className="py-2.5 px-1 text-right text-slate-700 font-semibold">₹{item.price}</td>
+                        <td className="py-2.5 px-1 text-right font-black text-slate-900">₹{item.total.toLocaleString('en-IN')}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -771,19 +849,32 @@ export const OrdersPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Action Buttons: View Timeline & Download Invoice */}
-            <div className="pt-2 grid grid-cols-2 gap-3">
+            {/* Action Buttons: View Timeline & Download Invoice & Delete Order */}
+            <div className="pt-2 flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowTimeline(prev => !prev)}
+                  className="py-2.5 bg-white hover:bg-emerald-50 border border-emerald-600 text-emerald-700 font-bold text-xs rounded-xl shadow-2xs cursor-pointer transition-colors"
+                >
+                  {showTimeline ? 'Hide Timeline' : 'View Timeline'}
+                </button>
+                <button
+                  onClick={handleDownloadInvoice}
+                  className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                >
+                  <Download className="w-4 h-4" /> Download Invoice
+                </button>
+              </div>
               <button
-                onClick={() => setShowTimeline(prev => !prev)}
-                className="py-2.5 bg-white hover:bg-emerald-50 border border-emerald-600 text-emerald-700 font-bold text-xs rounded-xl shadow-2xs cursor-pointer transition-colors"
+                onClick={() => {
+                  if (window.confirm(`Are you sure you want to delete Order #${activeOrder.id}?`)) {
+                    deleteOrder(activeOrder.id);
+                    setShowOrderDetailPanel(false);
+                  }
+                }}
+                className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
               >
-                {showTimeline ? 'Hide Timeline' : 'View Timeline'}
-              </button>
-              <button
-                onClick={handleDownloadInvoice}
-                className="py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
-              >
-                <Download className="w-4 h-4" /> Download Invoice
+                <Trash2 className="w-4 h-4 text-rose-600" /> Delete Order Record
               </button>
             </div>
 

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ArrowLeft,
-  Sprout,
   User,
   Smartphone,
   Mail,
@@ -10,6 +9,7 @@ import {
   Eye,
   EyeOff,
   CheckCircle2,
+  AlertCircle,
   Gift
 } from 'lucide-react';
 import { useJoinerApp } from '../JoinerAppContext';
@@ -27,6 +27,7 @@ export const RegisterScreen: React.FC = () => {
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
   const zonesList = [
@@ -46,32 +47,40 @@ export const RegisterScreen: React.FC = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+
     if (!name || !mobile || !email || !zone || !password) {
-      alert('Please fill all required fields');
+      setErrorMessage('Please fill in all required fields.');
       return;
     }
 
-    if (mobile.length < 10) {
-      alert('Please enter a valid 10-digit mobile number');
+    const cleanMobile = mobile.replace(/[^0-9]/g, '');
+    if (cleanMobile.length !== 10) {
+      setErrorMessage('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters.');
       return;
     }
 
     if (password !== confirmPassword) {
-      alert('Passwords do not match');
+      setErrorMessage('Passwords do not match.');
       return;
     }
 
     if (!agreeTerms) {
-      alert('Please agree to terms and conditions');
+      setErrorMessage('Please accept the Terms & Conditions.');
       return;
     }
 
     setIsLoading(true);
     try {
       await registerUser({
-        name,
-        phone: mobile,
-        email,
+        name: name.trim(),
+        phone: cleanMobile,
+        email: email.trim(),
         zone,
         password
       });
@@ -83,7 +92,7 @@ export const RegisterScreen: React.FC = () => {
       }, 1200);
     } catch (err: any) {
       setIsLoading(false);
-      alert(err.message || 'Registration failed');
+      setErrorMessage(err.message || 'Registration failed. Please try again.');
     }
   };
 
@@ -97,53 +106,65 @@ export const RegisterScreen: React.FC = () => {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className="flex items-center gap-1.5 text-[#15803d]">
-          <Sprout className="w-4 h-4 fill-[#15803d]" />
-          <span className="font-extrabold text-sm tracking-tight">FarmerBox</span>
+        <div className="flex items-center gap-2">
+          <img
+            src="/images/farmerbox_brand_logo.png"
+            alt="FarmerBox"
+            className="w-6 h-6 object-contain rounded-md"
+          />
+          <span className="font-black text-sm text-[#0D472B] tracking-tight">FarmerBox</span>
         </div>
         <div className="w-5"></div>
       </div>
 
       {/* Form Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3.5">
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
         {isSuccess ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h3 className="text-lg font-black text-slate-900">Welcome to FarmerBox!</h3>
+            <h3 className="text-lg font-black text-slate-900">Registration Successful!</h3>
             <p className="text-xs text-slate-500 max-w-xs mx-auto">
-              Your Joiner Account for <strong>{name}</strong> in {zone} Zone has been created successfully.
+              Your account has been created successfully. Loading dashboard...
             </p>
           </div>
         ) : (
           <>
             {/* Headline */}
-            <div className="space-y-1">
-              <h2 className="text-xl font-black text-slate-900 leading-tight">
-                Joiner Registration
+            <div className="space-y-1 text-center">
+              <h2 className="text-2xl font-black text-slate-900">
+                Create Account
               </h2>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Connect hotels with fresh vegetables & earn <strong className="text-emerald-700">₹100</strong> per delivered order.
+              <p className="text-xs text-slate-500 font-medium">
+                Register as a Hotel Joiner
               </p>
             </div>
 
+            {/* Error Notification Banner */}
+            {errorMessage && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="font-medium leading-tight">{errorMessage}</span>
+              </div>
+            )}
+
             {/* Registration Form */}
-            <form onSubmit={handleRegister} className="space-y-3 text-xs">
+            <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
               {/* Full Name */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Full Name <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
-                    placeholder="e.g. Rahul Patil"
+                    placeholder="Enter your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
                   />
                 </div>
               </div>
@@ -154,17 +175,17 @@ export const RegisterScreen: React.FC = () => {
                   Mobile Number <span className="text-rose-500">*</span>
                 </label>
                 <div className="flex border border-slate-200 rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-emerald-600">
-                  <span className="px-3 py-2 bg-slate-50 text-slate-500 font-semibold border-r border-slate-200 text-xs flex items-center gap-1">
+                  <span className="px-3 py-2.5 bg-slate-50 text-slate-500 font-semibold border-r border-slate-200 text-xs flex items-center gap-1">
                     <Smartphone className="w-3.5 h-3.5 text-slate-400" /> +91
                   </span>
                   <input
                     type="tel"
-                    placeholder="10-digit mobile"
+                    placeholder="Mobile number"
                     value={mobile}
                     onChange={(e) => setMobile(e.target.value)}
                     maxLength={10}
                     required
-                    className="flex-1 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                    className="flex-1 px-3 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
                   />
                 </div>
               </div>
@@ -175,14 +196,14 @@ export const RegisterScreen: React.FC = () => {
                   Email Address <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="email"
-                    placeholder="rahul@example.com"
+                    placeholder="Email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
                   />
                 </div>
               </div>
@@ -193,12 +214,12 @@ export const RegisterScreen: React.FC = () => {
                   Operating Zone <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <select
                     value={zone}
                     onChange={(e) => setZone(e.target.value)}
                     required
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 bg-white focus:outline-emerald-600"
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 bg-white focus:outline-emerald-600"
                   >
                     {zonesList.map(z => (
                       <option key={z} value={z}>{z} Zone</option>
@@ -216,16 +237,16 @@ export const RegisterScreen: React.FC = () => {
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Min 6 chars"
+                      placeholder="Password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="w-full pl-3 pr-8 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
+                      className="w-full pl-3 pr-8 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2.5 top-2.5 text-slate-400 cursor-pointer"
+                      className="absolute right-2.5 top-3 text-slate-400 cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
@@ -238,11 +259,11 @@ export const RegisterScreen: React.FC = () => {
                   </label>
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Re-enter"
+                    placeholder="Confirm"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600"
                   />
                 </div>
               </div>
@@ -253,29 +274,29 @@ export const RegisterScreen: React.FC = () => {
                   Referral Code <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <div className="relative">
-                  <Gift className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <Gift className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
-                    placeholder="Enter referral code (e.g. JOIN500)"
+                    placeholder="Referral code"
                     value={referralCode}
                     onChange={(e) => setReferralCode(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600 uppercase"
+                    className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-emerald-600 uppercase"
                   />
                 </div>
               </div>
 
               {/* Terms Checkbox */}
               <div className="pt-1">
-                <label className="flex items-start gap-2 cursor-pointer text-slate-600 text-[11px] leading-tight">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-600 text-xs">
                   <input
                     type="checkbox"
                     checked={agreeTerms}
                     onChange={(e) => setAgreeTerms(e.target.checked)}
                     required
-                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 mt-0.5"
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                   />
                   <span>
-                    I agree to the <strong className="text-[#15803d]">FarmerBox Joiner Terms</strong> and commission payout policy.
+                    I agree to the <strong className="text-[#15803d]">Terms & Conditions</strong>
                   </span>
                 </label>
               </div>
@@ -285,9 +306,9 @@ export const RegisterScreen: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3 bg-[#15803d] hover:bg-[#166534] text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-[#15803d] hover:bg-[#166534] text-white font-bold text-sm rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {isLoading ? 'Creating Account...' : 'Create Joiner Account'}
+                  {isLoading ? 'Creating Account...' : 'Register'}
                 </button>
               </div>
             </form>
@@ -303,7 +324,7 @@ export const RegisterScreen: React.FC = () => {
             onClick={() => setCurrentScreen('LOGIN')}
             className="font-extrabold text-[#15803d] hover:underline cursor-pointer"
           >
-            Login here
+            Login
           </button>
         </p>
       </div>

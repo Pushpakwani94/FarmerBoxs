@@ -29,7 +29,7 @@ export const Header: React.FC = () => {
   const hasResults = matchingHotels.length > 0 || matchingOrders.length > 0 || matchingJoiners.length > 0;
 
   return (
-    <header className="bg-white border-b border-slate-200/80 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+    <header className="bg-white border-b border-slate-200/80 px-6 py-3 flex items-center justify-between shrink-0 z-20">
       {/* Left: Hamburger & Title */}
       <div className="flex items-center gap-3">
         <button
@@ -41,10 +41,10 @@ export const Header: React.FC = () => {
         </button>
         <div>
           <h2 className="text-base font-bold text-slate-900 tracking-tight">
-            {activeTab === 'Dashboard' ? 'Admin Dashboard' : `${activeTab} Management`}
+            {activeTab === 'Dashboard' ? 'Admin Dashboard' : activeTab === 'B2C Catalog' ? 'B2C Fresh Retail Catalog' : `${activeTab} Management`}
           </h2>
           <p className="text-[11px] text-slate-500 font-normal leading-tight">
-            Manage hotels, joiners, orders and deliver fresh vegetables
+            {activeTab === 'B2C Catalog' ? 'Manage consumer household portions, retail vegetables & fruits' : 'Manage hotels, joiners, orders and deliver fresh vegetables'}
           </p>
         </div>
       </div>

@@ -32,9 +32,11 @@ try {
 }
 
 # 4. Copy to public directory for direct download in admin panel
+$farmerBoxApk = "d:\Canary-All-Project\FinalFarmerBox\FarmerBoxAdminPanel\public\FarmerBox.apk"
 Copy-Item $apkPath $publicApk -Force
+Copy-Item $apkPath $farmerBoxApk -Force
 Write-Host "`n=== APK Generated Successfully ===" -ForegroundColor Green
-Get-Item $publicApk | Select-Object Name, Length, LastWriteTime
+Get-Item $farmerBoxApk | Select-Object Name, Length, LastWriteTime
 
 # 5. Check connected device
 Write-Host "`nChecking for connected Android devices via ADB..." -ForegroundColor Yellow

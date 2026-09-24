@@ -41,7 +41,7 @@ export const HotelsPage: React.FC = () => {
   const [selectedJoiner, setSelectedJoiner] = useState('All Joiners');
   const [selectedTab, setSelectedTab] = useState<'Order History' | 'Payment History' | 'Hotel Info' | 'Documents'>('Order History');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Edit Hotel modal state
   const [editingHotel, setEditingHotel] = useState<Hotel | null>(null);
@@ -89,7 +89,7 @@ export const HotelsPage: React.FC = () => {
       ownerName: h.ownerName || '',
       mobile: h.mobile || '',
       zone: h.zone || (zones[0]?.name || 'Kharadi'),
-      joiner: h.joiner || (joiners[0]?.name || 'Rahul Patil'),
+      joiner: h.joiner || (joiners[0]?.name || ''),
       address: h.address || '',
       status: h.status === 'Active' ? 'Active' : 'Inactive'
     });
@@ -201,14 +201,19 @@ export const HotelsPage: React.FC = () => {
       </div>
 
       {/* Main Grid: Left Table + Right Hotel Details Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column: Hotels List (7 cols) */}
         <div className="lg:col-span-7 bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h3 className="font-bold text-base text-slate-800">Hotels List</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-base text-slate-800">Hotels List</h3>
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
+                {filteredHotels.length}
+              </span>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-40 sm:w-44">
+              <div className="relative w-36 sm:w-44">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
@@ -252,29 +257,30 @@ export const HotelsPage: React.FC = () => {
 
               <button
                 onClick={() => setIsAddHotelOpen(true)}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-lg flex items-center gap-1 cursor-pointer transition-colors shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" /> New
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
-                  <th className="py-2.5 px-2">#</th>
-                  <th className="py-2.5 px-2">Hotel Name</th>
-                  <th className="py-2.5 px-2">Owner Name</th>
-                  <th className="py-2.5 px-2">Mobile</th>
-                  <th className="py-2.5 px-2">Zone</th>
-                  <th className="py-2.5 px-2">Joiner</th>
-                  <th className="py-2.5 px-2 text-center">Orders</th>
-                  <th className="py-2.5 px-2 text-center">Status</th>
-                  <th className="py-2.5 px-2 text-center">Actions</th>
+          {/* Table Container without inner vertical scrolling */}
+          <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-2xs">
+            <table className="w-full min-w-[780px] text-left text-xs border-collapse">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold">
+                <tr>
+                  <th className="py-2.5 px-3 whitespace-nowrap">#</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Hotel Name</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Owner Name</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Mobile</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Zone</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Joiner</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap">Orders</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-3 text-center whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {paginatedHotels.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
@@ -299,8 +305,8 @@ export const HotelsPage: React.FC = () => {
                         activeHotel && String(activeHotel.id) === String(h.id) ? 'bg-emerald-50/80 font-semibold' : 'hover:bg-slate-50/60'
                       }`}
                     >
-                      <td className="py-2.5 px-2 font-medium text-slate-500">{h.id}</td>
-                      <td className="py-2.5 px-2 font-bold text-slate-800">
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">{h.id}</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-800 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <img
                             src={h.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100'}
@@ -310,13 +316,13 @@ export const HotelsPage: React.FC = () => {
                               (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100';
                             }}
                           />
-                          <span className="truncate max-w-[130px]">{h.name || 'Unnamed Hotel'}</span>
+                          <span className="truncate max-w-[150px]">{h.name || 'Unnamed Hotel'}</span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-2 text-slate-700">{h.ownerName || '—'}</td>
-                      <td className="py-2.5 px-2 text-slate-600">{h.mobile || '—'}</td>
-                      <td className="py-2.5 px-2 text-slate-700 font-medium">{h.zone || '—'}</td>
-                      <td className="py-2.5 px-2 text-slate-600">
+                      <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap">{h.ownerName || '—'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 font-mono whitespace-nowrap">{h.mobile || '—'}</td>
+                      <td className="py-2.5 px-3 text-slate-700 font-medium whitespace-nowrap">{h.zone || '—'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
                         {h.addedBy === 'Admin' || h.joiner === 'Admin' || h.assignedJoiner === 'Admin' ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
                             <Shield className="w-2.5 h-2.5 text-amber-600" /> Admin
@@ -325,15 +331,15 @@ export const HotelsPage: React.FC = () => {
                           h.joiner || '—'
                         )}
                       </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-slate-800">{h.totalOrders ?? 0}</td>
-                      <td className="py-2.5 px-2 text-center">
+                      <td className="py-2.5 px-3 text-center font-bold text-slate-800 whitespace-nowrap">{h.totalOrders ?? 0}</td>
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
                           h.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}>
                           {h.status || 'Active'}
                         </span>
                       </td>
-                      <td className="py-2.5 px-2 text-center">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={(e) => {
@@ -376,11 +382,30 @@ export const HotelsPage: React.FC = () => {
             </table>
           </div>
 
-          <div className="flex items-center justify-between pt-2 text-xs text-slate-500">
-            <span>
-              Showing {filteredHotels.length === 0 ? 0 : (safeCurrentPage - 1) * itemsPerPage + 1} to{' '}
-              {Math.min(safeCurrentPage * itemsPerPage, filteredHotels.length)} of {filteredHotels.length} hotels
-            </span>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <span>
+                Showing {filteredHotels.length === 0 ? 0 : (safeCurrentPage - 1) * itemsPerPage + 1} to{' '}
+                {Math.min(safeCurrentPage * itemsPerPage, filteredHotels.length)} of {filteredHotels.length} hotels
+              </span>
+              <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
+                <span className="text-[11px] text-slate-400">Rows:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={e => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-1.5 py-0.5 text-xs bg-slate-50 border border-slate-200 rounded font-semibold text-slate-700 focus:outline-emerald-600 cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -440,17 +465,31 @@ export const HotelsPage: React.FC = () => {
         </div>
 
         {/* Right Column: Selected Hotel Details (5 cols) */}
-        <div className="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+        <div className="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 sticky top-6 self-start max-h-[calc(100vh-100px)] overflow-y-auto">
           {activeHotel ? (
             <>
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h3 className="font-bold text-sm text-slate-800">Hotel Details</h3>
-                <button
-                  onClick={() => handleOpenEdit(activeHotel)}
-                  className="px-3 py-1 bg-emerald-700 text-white text-xs font-semibold rounded-lg hover:bg-emerald-800 flex items-center gap-1 cursor-pointer"
-                >
-                  <Edit className="w-3 h-3" /> Edit
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleOpenEdit(activeHotel)}
+                    className="px-2.5 py-1 bg-emerald-700 text-white text-xs font-semibold rounded-lg hover:bg-emerald-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit className="w-3 h-3" /> Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete ${activeHotel.name}?`)) {
+                        deleteHotel(activeHotel.id);
+                        setSelectedHotel(null);
+                      }
+                    }}
+                    className="p-1 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 text-xs font-semibold rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+                    title="Delete Hotel"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -593,7 +632,7 @@ export const HotelsPage: React.FC = () => {
                   <div className="py-3 text-xs space-y-2 text-slate-600">
                     <p><strong>Full Address:</strong> {activeHotel.address || 'Pune, Maharashtra'}</p>
                     <p><strong>Assigned Territory:</strong> {activeHotel.zone || 'Kharadi'} Zone</p>
-                    <p><strong>Key Account Executive:</strong> {activeHotel.joiner || 'Rahul Patil'}</p>
+                    <p><strong>Key Account Executive:</strong> {activeHotel.joiner || '—'}</p>
                   </div>
                 )}
 
@@ -744,20 +783,35 @@ export const HotelsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+              <div className="pt-3 flex items-center justify-between border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditingHotel(null)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold cursor-pointer"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete ${editingHotel.name}?`)) {
+                      deleteHotel(editingHotel.id);
+                      setEditingHotel(null);
+                    }
+                  }}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
-                  Cancel
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Delete</span>
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-xs cursor-pointer"
-                >
-                  Save Changes
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingHotel(null)}
+                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-xs cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
               </div>
             </form>
           </div>

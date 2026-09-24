@@ -27,7 +27,8 @@ import {
   ArrowUpRight,
   Sliders,
   Check,
-  RotateCcw
+  RotateCcw,
+  Apple
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ApkDownloadModal } from '../components/Modals/ApkDownloadModal';
@@ -45,7 +46,8 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
     setSelectedJoiner,
     setSelectedHotel,
     setSelectedOrder,
-    updateOrderStatus
+    updateOrderStatus,
+    addNotification
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<
@@ -53,13 +55,15 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
   >('overview');
 
   const [isApkModalOpen, setIsApkModalOpen] = useState(false);
+  const [modalPlatform, setModalPlatform] = useState<'android' | 'ios'>('android');
   const [searchTerm, setSearchTerm] = useState('');
   const [zoneFilter, setZoneFilter] = useState('All Zones');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [otaBroadcastSuccess, setOtaBroadcastSuccess] = useState(false);
   const [dispatchedOrderId, setDispatchedOrderId] = useState<string | null>(null);
 
-  const apkFileName = 'farmerbox-joiner-v2.4.1.apk';
+  const apkFileName = 'farmerbox-joiner-v2.5.0.apk';
+  const iosFileName = 'farmerbox-joiner-ios.zip';
 
   // Trigger browser APK download
   const handleDownloadApk = () => {
@@ -71,9 +75,33 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Simulate Push OTA update trigger
+  // Trigger browser iOS Zip download
+  const handleDownloadIos = () => {
+    const link = document.createElement('a');
+    link.href = `/${iosFileName}`;
+    link.download = iosFileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Push OTA update trigger: Sends live update notification to all mobile app joiners
   const handleTriggerOta = () => {
     setOtaBroadcastSuccess(true);
+    addNotification({
+      title: '🚀 App Update v2.5.0 Available!',
+      message: 'FarmerBox v2.5.0 is now live! Includes Dal & Pulses category, active hotel toggle, and reorder fixes.',
+      subtitle: 'Tap to update to latest build v2.5.0',
+      userType: 'Joiners',
+      category: 'System',
+      iconType: 'system',
+      status: 'Sent',
+      dateTime: new Date().toLocaleString(),
+      isAppUpdate: true,
+      hasUpdateFile: true,
+      fileName: apkFileName,
+      version: 'v2.5.0'
+    });
     setTimeout(() => setOtaBroadcastSuccess(false), 3500);
   };
 
@@ -142,11 +170,11 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-[#15803d] text-xs font-black flex items-center gap-1 border border-emerald-200">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  v2.4.1 APK Stable
+                  Android APK & iOS v2.4.1
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1">
-                Manage hotels, joiners, vegetable orders and deliver fresh vegetables • Android APK distribution & live telemetry
+                Manage hotels, joiners, vegetable orders and deliver fresh vegetables • Android & iOS app distribution
               </p>
             </div>
           </div>
@@ -155,20 +183,33 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={handleDownloadApk}
-              className="px-4 py-2 bg-[#15803d] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-700/20 hover:shadow-emerald-700/30 flex items-center gap-2 transition-all cursor-pointer"
+              className="px-3.5 py-2 bg-[#15803d] hover:bg-[#166534] text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-700/20 hover:shadow-emerald-700/30 flex items-center gap-2 transition-all cursor-pointer"
             >
               <Download className="w-4 h-4" /> Download APK (v2.4.1)
             </button>
 
             <button
-              onClick={() => setIsApkModalOpen(true)}
+              onClick={handleDownloadIos}
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Apple className="w-4 h-4 text-emerald-400" /> iOS App (.zip)
+            </button>
+
+            <button
+              onClick={() => {
+                setModalPlatform('android');
+                setIsApkModalOpen(true);
+              }}
               className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#15803d] border border-emerald-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <QrCode className="w-4 h-4" /> Scan QR
             </button>
 
             <button
-              onClick={() => setIsApkModalOpen(true)}
+              onClick={() => {
+                setModalPlatform('android');
+                setIsApkModalOpen(true);
+              }}
               className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Share2 className="w-4 h-4" /> Share Link
@@ -176,9 +217,9 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
 
             <button
               onClick={() => setActiveSubTab('simulator')}
-              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Layers className="w-4 h-4 text-emerald-400" /> Interactive Simulator
+              <Layers className="w-4 h-4 text-emerald-200" /> Interactive Simulator
             </button>
           </div>
         </div>
@@ -301,11 +342,11 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
             <div className="relative z-10 max-w-3xl space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/20 text-xs font-bold text-emerald-100">
                 <ShieldCheck className="w-4 h-4 text-emerald-200" />
-                <span>Verified Release • Built with React Native & Expo</span>
+                <span>Verified Release • Built with React Native & Capacitor iOS/Android Bridge</span>
               </div>
 
               <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
-                FarmerBox Joiner Mobile App (Android APK v2.4.1)
+                FarmerBox Joiner Mobile App (v2.4.1)
               </h2>
 
               <p className="text-sm text-emerald-100 font-medium leading-relaxed">
@@ -315,16 +356,26 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button
                   onClick={handleDownloadApk}
-                  className="px-6 py-3.5 bg-white hover:bg-emerald-50 text-[#15803d] font-black text-sm rounded-2xl shadow-lg flex items-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                  className="px-5 py-3.5 bg-white hover:bg-emerald-50 text-[#15803d] font-black text-sm rounded-2xl shadow-lg flex items-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <Download className="w-4 h-4" /> Download Official APK (24.8 MB)
+                  <Download className="w-4 h-4" /> Download APK (Android • 63.3 MB)
                 </button>
 
                 <button
-                  onClick={() => setIsApkModalOpen(true)}
-                  className="px-5 py-3.5 bg-emerald-800/60 hover:bg-emerald-800/80 text-white font-bold text-sm rounded-2xl border border-emerald-400/40 flex items-center gap-2 transition-colors cursor-pointer"
+                  onClick={handleDownloadIos}
+                  className="px-5 py-3.5 bg-slate-900/90 hover:bg-slate-900 text-white font-black text-sm rounded-2xl shadow-lg border border-white/20 flex items-center gap-2.5 transition-all transform hover:-translate-y-0.5 cursor-pointer"
                 >
-                  <QrCode className="w-4 h-4 text-emerald-300" /> Scan QR to Install on Phone
+                  <Apple className="w-4 h-4 text-emerald-400" /> Download iOS App (.zip • 47.8 MB)
+                </button>
+
+                <button
+                  onClick={() => {
+                    setModalPlatform('android');
+                    setIsApkModalOpen(true);
+                  }}
+                  className="px-4 py-3.5 bg-emerald-800/60 hover:bg-emerald-800/80 text-white font-bold text-sm rounded-2xl border border-emerald-400/40 flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4 text-emerald-300" /> Scan QR
                 </button>
 
                 <button
@@ -332,14 +383,14 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
                   className="px-4 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-2xl border border-white/20 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${otaBroadcastSuccess ? 'animate-spin text-emerald-300' : ''}`} />
-                  {otaBroadcastSuccess ? 'Push Update Broadcast Sent!' : 'Push OTA Update to Devices'}
+                  {otaBroadcastSuccess ? 'Push Update Broadcast Sent!' : 'Push OTA Update'}
                 </button>
               </div>
 
               {/* Version Specs */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-emerald-600/40 text-xs">
                 <div>
-                  <span className="text-emerald-200/80 text-[11px] font-bold">Package Name:</span>
+                  <span className="text-emerald-200/80 text-[11px] font-bold">App Identifier:</span>
                   <p className="font-mono font-bold text-white">com.farmerbox.joiner</p>
                 </div>
                 <div>
@@ -347,8 +398,8 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
                   <p className="font-mono font-bold text-white">v2.4.1 (Build 42)</p>
                 </div>
                 <div>
-                  <span className="text-emerald-200/80 text-[11px] font-bold">Min Android Version:</span>
-                  <p className="font-mono font-bold text-white">Android 8.0+ (API 26)</p>
+                  <span className="text-emerald-200/80 text-[11px] font-bold">Supported Platforms:</span>
+                  <p className="font-mono font-bold text-white">Android 8+ & iOS 14+</p>
                 </div>
                 <div>
                   <span className="text-emerald-200/80 text-[11px] font-bold">Release Channel:</span>
@@ -358,7 +409,7 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 3 Column Information Grid: Release Notes, Device Stats, ADB Instructions */}
+          {/* 3 Column Information Grid: Release Notes, Device Stats, ADB & iOS Instructions */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {/* Column 1: What's New in App */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
@@ -445,34 +496,58 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 border-t border-slate-100 text-[11px] space-y-1 text-slate-500">
-                  <p>• Top Device Models: Samsung Galaxy M34, Redmi Note 12, Realme C55, OnePlus Nord</p>
-                  <p>• Operating Systems: Android 12, 13, 14</p>
+                  <p>• Supported Models: Android (Samsung, Redmi, Realme) & iOS (iPhone 11 - 16 Pro)</p>
+                  <p>• Operating Systems: Android 12-15 • iOS 16-18</p>
                 </div>
               </div>
             </div>
 
-            {/* Column 3: Fast Developer ADB Commands */}
+            {/* Column 3: Fast Developer ADB & iOS Setup */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
-                  <Download className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">Physical Device ADB Setup</h3>
-                  <p className="text-[11px] text-slate-500">Direct USB installation</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
+                    <Download className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">Physical Device Deployment</h3>
+                    <p className="text-[11px] text-slate-500">Android USB & iOS Xcode</p>
+                  </div>
                 </div>
               </div>
 
               <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] space-y-1.5">
-                <p className="text-slate-400"># Install APK over USB debugging:</p>
-                <p className="text-emerald-400 select-all font-bold">adb install -r farmerbox-joiner-v2.4.1.apk</p>
-                <p className="text-slate-400 mt-2"># Launch main activity:</p>
-                <p className="text-emerald-300 select-all">adb shell am start -n com.farmerbox.joiner/.MainActivity</p>
+                <p className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Smartphone className="w-3.5 h-3.5" /> Android USB Install:
+                </p>
+                <p className="text-slate-300 select-all font-bold">adb install -r farmerbox-joiner-v2.4.1.apk</p>
+                
+                <p className="text-emerald-400 font-bold flex items-center gap-1 pt-2 border-t border-slate-800">
+                  <Apple className="w-3.5 h-3.5" /> iOS Xcode Project:
+                </p>
+                <p className="text-slate-300 select-all font-bold">open ios/App/App.xcworkspace</p>
               </div>
 
-              <p className="text-[11px] text-slate-500">
-                Plug your phone in via USB with USB Debugging enabled in Android Developer Settings to immediately deploy the latest APK.
-              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => {
+                    setModalPlatform('android');
+                    setIsApkModalOpen(true);
+                  }}
+                  className="flex-1 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#15803d] border border-emerald-200 rounded-lg text-[11px] font-bold text-center cursor-pointer transition-colors"
+                >
+                  Android Guide
+                </button>
+                <button
+                  onClick={() => {
+                    setModalPlatform('ios');
+                    setIsApkModalOpen(true);
+                  }}
+                  className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-lg text-[11px] font-bold text-center cursor-pointer transition-colors"
+                >
+                  iOS Xcode Guide
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -873,7 +948,7 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleDownloadApk}
                 className="px-3.5 py-1.5 bg-white text-[#15803d] font-bold text-xs rounded-xl shadow-xs hover:bg-emerald-50 transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -881,8 +956,17 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
                 <Download className="w-3.5 h-3.5" /> Download APK
               </button>
               <button
-                onClick={() => setIsApkModalOpen(true)}
-                className="px-3 py-1.5 bg-emerald-800 text-white font-bold text-xs rounded-xl border border-emerald-400/40 hover:bg-emerald-700 transition-colors flex items-center gap-1 cursor-pointer"
+                onClick={handleDownloadIos}
+                className="px-3.5 py-1.5 bg-slate-900 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Apple className="w-3.5 h-3.5 text-emerald-400" /> iOS (.zip)
+              </button>
+              <button
+                onClick={() => {
+                  setModalPlatform('android');
+                  setIsApkModalOpen(true);
+                }}
+                className="px-3.5 py-1.5 bg-emerald-800 text-white font-bold text-xs rounded-xl border border-emerald-400/40 hover:bg-emerald-700 transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <QrCode className="w-3.5 h-3.5" /> Scan QR
               </button>
@@ -895,8 +979,12 @@ export const JoinerMobileAppManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* Shared APK Download & QR Modal */}
-      <ApkDownloadModal isOpen={isApkModalOpen} onClose={() => setIsApkModalOpen(false)} />
+      {/* Shared APK & iOS Download & QR Modal */}
+      <ApkDownloadModal
+        isOpen={isApkModalOpen}
+        onClose={() => setIsApkModalOpen(false)}
+        defaultPlatform={modalPlatform}
+      />
     </div>
   );
 };

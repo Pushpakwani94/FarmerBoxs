@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useJoinerApp } from './JoinerAppContext';
 import type { MobileScreen } from './JoinerAppContext';
+import { MobileSplashScreen } from './screens/MobileSplashScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
@@ -26,35 +27,51 @@ import { OrderSuccessScreen } from './screens/OrderSuccessScreen';
 import { CommissionScreen } from './screens/CommissionScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { AppUpdateModal } from './components/AppUpdateModal';
+import { GlobalNotificationToast } from './components/GlobalNotificationToast';
 
 export const MobileDeviceSimulator: React.FC = () => {
-  const { currentScreen, setCurrentScreen, userProfile } = useJoinerApp();
+  const { currentScreen, setCurrentScreen, userProfile, logoutUser, verifyPhoneOtp } = useJoinerApp();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
-  const screenList: Array<{ id: MobileScreen; label: string; num: number }> = [
+  const isAuthenticated = Boolean(userProfile.uid);
+
+  const screenList: Array<{ id: MobileScreen; label: string; num: number; isProtected?: boolean }> = [
+    { id: 'SPLASH', label: '✨ 0. Splash Animation', num: 0 },
     { id: 'WELCOME', label: '1. Welcome Landing', num: 1 },
     { id: 'LOGIN', label: '🔑 Login Page', num: 2 },
     { id: 'REGISTER', label: '📝 Registration Page', num: 3 },
-    { id: 'DASHBOARD', label: '2. Dashboard', num: 4 },
-    { id: 'MY_HOTELS', label: '3. My Hotels', num: 5 },
-    { id: 'ADD_HOTEL', label: '4. Add Hotel', num: 6 },
-    { id: 'PLACE_ORDER', label: '5. Select Products', num: 7 },
-    { id: 'CART', label: '6. Cart & Place Order', num: 8 },
-    { id: 'MY_ORDERS', label: '7. My Orders', num: 9 },
-    { id: 'REORDER', label: '8. Reorder', num: 10 },
-    { id: 'ORDER_SUCCESS', label: '9. Order Success', num: 11 },
-    { id: 'COMMISSION', label: '10. Commission', num: 12 },
-    { id: 'NOTIFICATIONS', label: '11. Notifications', num: 13 },
-    { id: 'PROFILE', label: '12. Profile', num: 14 }
+    { id: 'DASHBOARD', label: '2. Dashboard', num: 4, isProtected: true },
+    { id: 'MY_HOTELS', label: '3. My Hotels (CRUD)', num: 5, isProtected: true },
+    { id: 'ADD_HOTEL', label: '4. Add Hotel', num: 6, isProtected: true },
+    { id: 'PLACE_ORDER', label: '5. Select Products', num: 7, isProtected: true },
+    { id: 'CART', label: '6. Cart & Order', num: 8, isProtected: true },
+    { id: 'MY_ORDERS', label: '7. My Orders', num: 9, isProtected: true },
+    { id: 'REORDER', label: '8. Reorder', num: 10, isProtected: true },
+    { id: 'ORDER_SUCCESS', label: '9. Order Success', num: 11, isProtected: true },
+    { id: 'COMMISSION', label: '10. Commission', num: 12, isProtected: true },
+    { id: 'NOTIFICATIONS', label: '11. Notifications', num: 13, isProtected: true },
+    { id: 'PROFILE', label: '12. Profile', num: 14, isProtected: true }
   ];
 
-  const renderActiveScreen = () => {
-    // If not authenticated, private screens require login
-    if (!userProfile.uid && currentScreen !== 'WELCOME' && currentScreen !== 'LOGIN' && currentScreen !== 'REGISTER') {
-      return <LoginScreen />;
+  const handleSelectScreen = async (screenId: MobileScreen) => {
+    const isProtected = screenList.find(s => s.id === screenId)?.isProtected;
+    if (isProtected && !isAuthenticated) {
+      // Auto-authenticate as demo joiner for seamless admin preview
+      await verifyPhoneOtp('123456', '9876543210', 'Rahul Sharma', 'Kharadi Zone');
     }
+    setCurrentScreen(screenId);
+  };
 
+  const handleQuickDemoLogin = async () => {
+    await verifyPhoneOtp('123456', '9876543210', 'Rahul Sharma', 'Kharadi Zone');
+    setCurrentScreen('DASHBOARD');
+  };
+
+  const renderActiveScreen = () => {
     switch (currentScreen) {
+      case 'SPLASH':
+        return <MobileSplashScreen />;
       case 'WELCOME':
         return <WelcomeScreen />;
       case 'LOGIN':
@@ -84,7 +101,7 @@ export const MobileDeviceSimulator: React.FC = () => {
       case 'PROFILE':
         return <ProfileScreen />;
       default:
-        return <DashboardScreen />;
+        return isAuthenticated ? <DashboardScreen /> : <LoginScreen />;
     }
   };
 
@@ -98,23 +115,51 @@ export const MobileDeviceSimulator: React.FC = () => {
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900 leading-tight">
-                FarmerBox — Hotel Joiner Mobile App (React Native)
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900 leading-tight">
+                  FarmerBox — Hotel Joiner Mobile App
+                </h2>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  isAuthenticated ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {isAuthenticated ? `● Logged In: ${userProfile.name} (${userProfile.zone})` : '○ Unauthenticated'}
+                </span>
+              </div>
               <p className="text-xs text-slate-500 font-medium">
-                Complete 12-Screen Interactive Mobile Simulator • Pixel-Perfect to Figma Mockups
+                Complete 14-Screen Interactive Mobile Simulator • Click any screen to test directly
               </p>
             </div>
           </div>
 
           {/* Quick Actions */}
-          <div className="flex items-center gap-2">
-            {/* Reset App */}
+          <div className="flex flex-wrap items-center gap-2">
+            {!isAuthenticated ? (
+              <button
+                onClick={handleQuickDemoLogin}
+                className="px-3 py-1.5 bg-[#15803d] hover:bg-[#166534] text-white text-xs font-black rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              >
+                ⚡ 1-Tap Demo Joiner Login
+              </button>
+            ) : (
+              <button
+                onClick={() => logoutUser()}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Logout mobile session"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Logout Session
+              </button>
+            )}
+
+            {/* Play Splash Animation */}
             <button
-              onClick={() => setCurrentScreen('LOGIN')}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+              onClick={() => setCurrentScreen('SPLASH')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ${
+                currentScreen === 'SPLASH'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+              }`}
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Restart to Login
+              <RotateCcw className="w-3.5 h-3.5 text-emerald-600" /> Play Splash
             </button>
 
             {/* Scale/Zoom Controls */}
@@ -134,16 +179,16 @@ export const MobileDeviceSimulator: React.FC = () => {
           </div>
         </div>
 
-        {/* 12-Screen Direct Switcher Toolbar */}
+        {/* 14-Screen Direct Switcher Toolbar */}
         <div className="space-y-1.5 pt-2 border-t border-slate-100">
           <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-emerald-700" /> Jump directly to any of the 12 screens:
+            <Layers className="w-3.5 h-3.5 text-emerald-700" /> Jump directly to any of the 14 mobile screens:
           </p>
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             {screenList.map(screen => (
               <button
                 key={screen.id}
-                onClick={() => setCurrentScreen(screen.id)}
+                onClick={() => handleSelectScreen(screen.id)}
                 className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer text-xs ${
                   currentScreen === screen.id
                     ? 'bg-[#15803d] text-white shadow-xs scale-102'
@@ -187,8 +232,10 @@ export const MobileDeviceSimulator: React.FC = () => {
                 </div>
 
                 {/* Active Screen Content Area */}
-                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+                  <GlobalNotificationToast />
                   {renderActiveScreen()}
+                  <AppUpdateModal />
                 </div>
 
                 {/* Bottom Gesture Navigation Bar */}

@@ -30,6 +30,8 @@ export interface Order {
   zone: string;
   joiner: string;
   joinerId?: string | number;
+  joinedBy?: string;
+  joinerPhone?: string;
   amount: number;
   totalAmount?: number;
   paymentMode: 'Online' | 'COD' | 'Wallet';
@@ -69,7 +71,7 @@ export interface Zone {
 }
 
 export interface AssignedHotel {
-  id?: number;
+  id?: number | string;
   name: string;
   location: string;
   owner?: string;
@@ -80,7 +82,7 @@ export interface AssignedHotel {
 }
 
 export interface Joiner {
-  id: number;
+  id: number | string;
   joinerCode: string;
   name: string;
   mobile: string;
@@ -162,6 +164,7 @@ export interface Hotel {
   type?: string;
   totalSpent: number;
   registrationDate: string;
+  joinedDate?: string;
   gstNumber: string;
   fssaiNumber: string;
   rating: number;
@@ -169,6 +172,8 @@ export interface Hotel {
   image: string;
   orderHistory?: { id: string; date: string; amount: number; status: OrderStatus }[];
 }
+
+export type CatalogType = 'B2C' | 'B2B' | 'Both';
 
 export interface Product {
   id: number;
@@ -180,9 +185,17 @@ export interface Product {
   purchasePrice: number;
   salePrice: number;
   price?: number;
+  b2bPrice?: number;
+  b2cPrice?: number;
+  catalogType?: CatalogType;
+  targetCatalog?: CatalogType;
+  minOrderQty?: number;
   stock: number;
   minimumStock: number;
   status: 'Active' | 'Low Stock' | 'Out of Stock';
+  isImported?: boolean;
+  originCountry?: string;
+  countryFlag?: string;
   addedOn?: string;
   addedBy?: string;
   createdBy?: string;
@@ -215,6 +228,12 @@ export interface NotificationItem {
   time?: string;
   category?: string;
   iconType?: string;
+  notificationType?: 'Alert' | 'Order' | 'Commission' | 'AppUpdate';
+  isAppUpdate?: boolean;
+  hasUpdateFile?: boolean;
+  fileName?: string;
+  fileUrl?: string;
+  version?: string;
 }
 
 // Runtime exports for Vite ES module safety

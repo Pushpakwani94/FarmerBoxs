@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { CreditCard, Wallet, ArrowDownRight, ArrowUpRight, Plus, Search, Eye, Download, PieChart, ChevronLeft, ChevronRight, Send, RefreshCw } from 'lucide-react';
+import { CreditCard, Wallet, ArrowDownRight, ArrowUpRight, Plus, Search, Eye, Trash2, Download, PieChart, ChevronLeft, ChevronRight, Send, RefreshCw } from 'lucide-react';
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 export const PaymentsPage: React.FC = () => {
-  const { payments, orders, isDatabaseConnected, setActiveTab: setAppActiveTab } = useApp();
+  const { payments, orders, isDatabaseConnected, deletePayment, setActiveTab: setAppActiveTab } = useApp();
   const [activeTab, setActiveTab] = useState<'All Transactions' | 'Order Payments' | 'Joiner Payouts' | 'Driver Payouts' | 'Refunds'>('All Transactions');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -219,7 +219,19 @@ export const PaymentsPage: React.FC = () => {
                       </td>
                       <td className="py-2.5 px-2 text-slate-600 text-[11px]">{p.paymentMode}</td>
                       <td className="py-2.5 px-2 text-center">
-                        <button className="p-1 text-slate-500 hover:text-blue-600"><Eye className="w-3.5 h-3.5" /></button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to delete payment reference #${p.referenceId || p.id}?`)) {
+                                deletePayment(p.id);
+                              }
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 cursor-pointer transition-colors"
+                            title="Delete Payment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

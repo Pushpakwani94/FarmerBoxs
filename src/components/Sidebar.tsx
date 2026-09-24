@@ -20,19 +20,21 @@ import {
 import { useApp } from '../context/AppContext';
 
 export const Sidebar: React.FC = () => {
-  const { activeTab, setActiveTab, notifications, setIsNotificationsOpen } = useApp();
+  const { activeTab, setActiveTab, notifications, setIsNotificationsOpen, logoutAdmin } = useApp();
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const menuItems = [
     { id: 'Dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'Mobile App', label: 'Joiner Mobile App', icon: Smartphone, tag: 'Live' },
+    { id: 'Customer Mobile App', label: 'Customer B2C App', icon: Smartphone, tag: 'B2C' },
+    { id: 'Mobile App', label: 'Joiner Mobile App', icon: Smartphone, tag: 'B2B' },
     { id: 'Zones', label: 'Zones', icon: MapPin },
     { id: 'Hotel Joiners', label: 'Hotel Joiners', icon: Users },
     { id: 'Hotels', label: 'Hotels', icon: Building2 },
     { id: 'Orders', label: 'Orders', icon: ShoppingBag },
     { id: 'Delivery Drivers', label: 'Delivery Drivers', icon: Truck },
     { id: 'Products / Inventory', label: 'Products / Inventory', icon: Package },
+    { id: 'B2C Catalog', label: 'B2C Catalog', icon: ShoppingBag, tag: 'Retail' },
     { id: 'Joiner Commission', label: 'Joiner Commission', icon: CircleDollarSign },
     { id: 'Payments', label: 'Payments', icon: CreditCard },
     { id: 'Reports', label: 'Reports', icon: BarChart3 },
@@ -46,13 +48,18 @@ export const Sidebar: React.FC = () => {
     <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col h-screen select-none flex-shrink-0 overflow-y-auto z-20">
       <div>
         {/* Brand Header with solid green background */}
-        <div className="bg-[#15803d] px-5 py-4 flex items-center gap-3 text-white">
-          <div className="w-10 h-10 flex items-center justify-center flex-shrink-0 text-[#86efac]">
-            <Sprout className="w-8 h-8 fill-[#86efac]" />
-          </div>
+        <div className="bg-[#15803d] px-4 py-3.5 flex items-center gap-3 text-white">
+          <img
+            src="/farmerbox_app_icon.png"
+            alt="FarmerBoxs Logo"
+            className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-sm shrink-0"
+          />
           <div>
-            <h1 className="font-extrabold text-xl text-white tracking-tight leading-none">FarmerBox</h1>
-            <p className="text-[11px] text-green-100/90 font-medium mt-1">Fresh from Farmers to Hotels</p>
+            <h1 className="font-black text-lg text-white tracking-tight leading-none flex items-center gap-1">
+              <span>FarmerBoxs</span>
+              <span className="text-[9px] bg-white/20 text-white font-bold px-1.5 py-0.2 rounded">v2.5</span>
+            </h1>
+            <p className="text-[10px] text-green-100/90 font-medium mt-1">Farm Fresh to Your Door</p>
           </div>
         </div>
 
@@ -68,7 +75,7 @@ export const Sidebar: React.FC = () => {
                   if (item.id === 'Notifications') {
                     setActiveTab('Notifications');
                   } else if (item.id === 'Logout') {
-                    alert('Logged out successfully');
+                    logoutAdmin();
                   } else {
                     setActiveTab(item.id);
                   }

@@ -28,31 +28,35 @@ export const AddHotelScreen: React.FC = () => {
     'Kothrud'
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hotelName || !ownerName || !mobile || !address || !zone) {
       alert('Please fill all required fields');
       return;
     }
 
-    addHotel({
-      name: hotelName,
-      contactPerson: ownerName,
-      phone: mobile,
-      address,
-      zone,
-      gst,
-      fssai,
-      orders: 0,
-      status: 'Active',
-      image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=100'
-    });
+    try {
+      await addHotel({
+        name: hotelName,
+        contactPerson: ownerName,
+        phone: mobile,
+        address,
+        zone,
+        gst,
+        fssai,
+        orders: 0,
+        status: 'Active',
+        image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=100'
+      });
 
-    setIsSubmitted(true);
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setCurrentScreen('MY_HOTELS');
-    }, 1200);
+      setIsSubmitted(true);
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setCurrentScreen('MY_HOTELS');
+      }, 1200);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to add hotel. Please try again.');
+    }
   };
 
   return (

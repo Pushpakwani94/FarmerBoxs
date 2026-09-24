@@ -1,5 +1,6 @@
 import React from 'react';
 import { useJoinerApp, JoinerAppProvider } from './JoinerAppContext';
+import { MobileSplashScreen } from './screens/MobileSplashScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { LoginScreen } from './screens/LoginScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
@@ -14,16 +15,20 @@ import { OrderSuccessScreen } from './screens/OrderSuccessScreen';
 import { CommissionScreen } from './screens/CommissionScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { AppUpdateModal } from './components/AppUpdateModal';
+import { GlobalNotificationToast } from './components/GlobalNotificationToast';
 
 const MobileScreenRouter: React.FC = () => {
   const { currentScreen, userProfile } = useJoinerApp();
 
   // Strict route protection: unauthenticated users cannot view dashboard or private screens
-  if (!userProfile.uid && currentScreen !== 'WELCOME' && currentScreen !== 'LOGIN' && currentScreen !== 'REGISTER') {
+  if (!userProfile.uid && currentScreen !== 'SPLASH' && currentScreen !== 'WELCOME' && currentScreen !== 'LOGIN' && currentScreen !== 'REGISTER') {
     return <LoginScreen />;
   }
 
   switch (currentScreen) {
+    case 'SPLASH':
+      return <MobileSplashScreen />;
     case 'WELCOME':
       return <WelcomeScreen />;
     case 'LOGIN':
@@ -61,7 +66,9 @@ export const StandaloneMobileApp: React.FC = () => {
   return (
     <JoinerAppProvider>
       <div className="h-screen w-screen overflow-hidden bg-slate-50 flex flex-col select-none max-w-md mx-auto shadow-2xl relative">
+        <GlobalNotificationToast />
         <MobileScreenRouter />
+        <AppUpdateModal />
       </div>
     </JoinerAppProvider>
   );

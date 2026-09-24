@@ -31,8 +31,11 @@ export const NotificationsPage: React.FC = () => {
   const [filterUserType, setFilterUserType] = useState('All User Types');
   const [notifTitle, setNotifTitle] = useState('');
   const [notifMessage, setNotifMessage] = useState('');
-  const [userType, setUserType] = useState<'Hotels' | 'Drivers' | 'Joiners' | 'Admins' | 'All Users'>('Hotels');
+  const [userType, setUserType] = useState<'Hotels' | 'Drivers' | 'Joiners' | 'Admins' | 'All Users'>('All Users');
   const [scheduleDate, setScheduleDate] = useState('');
+  const [notificationType, setNotificationType] = useState<'Standard Alert' | 'Order Notice' | 'Commission Notice' | 'App Update Release'>('Standard Alert');
+  const [selectedFile, setSelectedFile] = useState('farmerbox-joiner-v2.5.0.apk');
+  const [targetVersion, setTargetVersion] = useState('v2.5.0');
   const [sendFeedback, setSendFeedback] = useState<string | null>(null);
 
   // Counts computed dynamically
@@ -78,6 +81,8 @@ export const NotificationsPage: React.FC = () => {
       minute: '2-digit'
     });
 
+    const isUpdate = notificationType === 'App Update Release';
+
     addNotification({
       title: notifTitle.trim(),
       message: notifMessage.trim(),
@@ -86,14 +91,21 @@ export const NotificationsPage: React.FC = () => {
       status: scheduleDate ? 'Scheduled' : 'Sent',
       dateTime: scheduleDate ? new Date(scheduleDate).toLocaleString('en-IN') : nowStr,
       time: 'Just now',
-      read: false
+      read: false,
+      category: isUpdate ? 'System' : notificationType === 'Order Notice' ? 'Orders' : notificationType === 'Commission Notice' ? 'Commission' : 'System',
+      iconType: isUpdate ? 'system' : notificationType === 'Order Notice' ? 'order' : notificationType === 'Commission Notice' ? 'commission' : 'system',
+      isAppUpdate: isUpdate,
+      hasUpdateFile: isUpdate,
+      fileName: isUpdate ? selectedFile : undefined,
+      version: isUpdate ? targetVersion : undefined
     });
 
     setNotifTitle('');
     setNotifMessage('');
     setScheduleDate('');
-    setSendFeedback('Notification sent successfully!');
-    setTimeout(() => setSendFeedback(null), 3000);
+    setNotificationType('Standard Alert');
+    setSendFeedback(isUpdate ? `App update broadcast sent with file ${selectedFile}!` : 'Notification sent successfully without file attachment!');
+    setTimeout(() => setSendFeedback(null), 3500);
   };
 
   const handleDelete = (id: number | string) => {
@@ -266,9 +278,16 @@ export const NotificationsPage: React.FC = () => {
                     >
                       <td className="py-2.5 px-2 text-slate-500">{idx + 1}</td>
                       <td className="py-2.5 px-2 font-bold text-slate-800">
-                        <div className="flex items-center gap-1.5">
-                          {!n.read && <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />}
-                          <span>{n.title || 'Notification'}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {!n.read && <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />}
+                            <span>{n.title || 'Notification'}</span>
+                            {(n.hasUpdateFile || n.isAppUpdate) && (
+                              <span className="px-1.5 py-0.2 bg-purple-100 text-purple-900 border border-purple-200 font-extrabold text-[9px] rounded flex items-center gap-1">
+                                📦 {n.fileName || 'Update File'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-2.5 px-2 text-slate-600 max-w-xs truncate">
@@ -339,10 +358,57 @@ export const NotificationsPage: React.FC = () => {
 
             <div className="space-y-2.5 text-xs">
               <div>
+                <label className="block text-slate-600 font-semibold mb-0.5">Notification Type *</label>
+                <select
+                  value={notificationType}
+                  onChange={e => setNotificationType(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
+                >
+                  <option value="Standard Alert">Standard Alert (Text Only - No File)</option>
+                  <option value="Order Notice">Order / Delivery Notice (Text Only)</option>
+                  <option value="Commission Notice">Commission Notice (Text Only)</option>
+                  <option value="App Update Release">🚀 App Update Release (Attach APK/File)</option>
+                </select>
+              </div>
+
+              {notificationType === 'App Update Release' && (
+                <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-purple-900 text-xs">Select Update Release File</span>
+                    <span className="text-[10px] bg-purple-200 text-purple-900 px-2 py-0.2 rounded-full font-bold">APK File</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium text-[11px] mb-0.5">Choose File *</label>
+                    <select
+                      value={selectedFile}
+                      onChange={e => setSelectedFile(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-purple-200 rounded-lg bg-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-purple-600 cursor-pointer"
+                    >
+                      <option value="farmerbox-joiner-v2.5.0.apk">farmerbox-joiner-v2.5.0.apk (Latest Android Build)</option>
+                      <option value="farmerbox-joiner-latest.apk">farmerbox-joiner-latest.apk (Production Stable)</option>
+                      <option value="farmerbox-joiner-ios.zip">farmerbox-joiner-ios.zip (iOS Package)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-medium text-[11px] mb-0.5">Version String</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. v2.5.0"
+                      value={targetVersion}
+                      onChange={e => setTargetVersion(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-purple-200 rounded-lg bg-white text-xs focus:outline-none focus:ring-1 focus:ring-purple-600"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
                 <label className="block text-slate-600 font-semibold mb-0.5">Title *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Price Drop on Fresh Tomatoes"
+                  placeholder={notificationType === 'App Update Release' ? 'e.g. 🚀 App Update v2.5.0 Available!' : 'e.g. Price Drop on Fresh Tomatoes'}
                   value={notifTitle}
                   onChange={e => setNotifTitle(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-600"
@@ -354,7 +420,7 @@ export const NotificationsPage: React.FC = () => {
                 <label className="block text-slate-600 font-semibold mb-0.5">Message *</label>
                 <textarea
                   rows={3}
-                  placeholder="Enter message details for clients/joiners..."
+                  placeholder={notificationType === 'App Update Release' ? 'What is new in this release (e.g. New pulses catalog, faster ordering)...' : 'Enter message details for clients/joiners...'}
                   value={notifMessage}
                   onChange={e => setNotifMessage(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-600"
@@ -363,17 +429,17 @@ export const NotificationsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-600 font-semibold mb-0.5">User Type *</label>
+                <label className="block text-slate-600 font-semibold mb-0.5">Target Audience *</label>
                 <select
                   value={userType}
                   onChange={e => setUserType(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
                 >
-                  <option value="Hotels">Hotels</option>
-                  <option value="Drivers">Drivers</option>
-                  <option value="Joiners">Joiners</option>
-                  <option value="Admins">Admins</option>
                   <option value="All Users">All Users</option>
+                  <option value="Joiners">Joiners (Mobile App Fleet)</option>
+                  <option value="Hotels">Hotels (Restaurant Partners)</option>
+                  <option value="Drivers">Drivers (Delivery Fleet)</option>
+                  <option value="Admins">Admins Only</option>
                 </select>
               </div>
 
@@ -389,9 +455,14 @@ export const NotificationsPage: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors mt-2"
+                className={`w-full py-2.5 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors mt-2 ${
+                  notificationType === 'App Update Release'
+                    ? 'bg-purple-700 hover:bg-purple-800'
+                    : 'bg-emerald-700 hover:bg-emerald-800'
+                }`}
               >
-                <Send className="w-4 h-4" /> Send Notification
+                <Send className="w-4 h-4" />
+                {notificationType === 'App Update Release' ? 'Broadcast App Update with File' : 'Send Notification'}
               </button>
             </div>
           </form>

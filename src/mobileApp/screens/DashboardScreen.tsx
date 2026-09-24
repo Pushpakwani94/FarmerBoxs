@@ -16,7 +16,7 @@ import { useJoinerApp } from '../JoinerAppContext';
 import { MobileBottomNav } from '../components/MobileBottomNav';
 
 export const DashboardScreen: React.FC = () => {
-  const { userProfile, commissionBalance, hotels, orders, setCurrentScreen } = useJoinerApp();
+  const { userProfile, commissionBalance, hotels, orders, setCurrentScreen, hasUnreadNotifications } = useJoinerApp();
 
   const activeHotelsCount = hotels.filter(h => h.status === 'Active').length;
   const pendingHotelsCount = hotels.filter(h => h.status === 'Pending').length;
@@ -55,7 +55,9 @@ export const DashboardScreen: React.FC = () => {
             className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center relative text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer shadow-2xs"
           >
             <Bell className="w-4 h-4" />
-            <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-2 right-2 ring-2 ring-white"></span>
+            {hasUnreadNotifications && (
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 absolute top-1.5 right-1.5 ring-2 ring-white animate-pulse"></span>
+            )}
           </button>
         </div>
 

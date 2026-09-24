@@ -12,29 +12,21 @@ export const ZonePerformanceTable: React.FC = () => {
     setActiveTab('Zones');
   };
 
-  const zonesData = isDatabaseConnected
-    ? zones.map(z => {
-        const zoneHotels = hotels.filter(h => h.zone?.toLowerCase() === z.name.toLowerCase()).length;
-        const zoneJoiners = joiners.filter(j => j.zone?.toLowerCase() === z.name.toLowerCase()).length;
-        const zoneOrders = orders.filter(o => o.zone?.toLowerCase() === z.name.toLowerCase());
-        const deliveredCount = zoneOrders.filter(o => o.status === 'Delivered').length;
-        const totalSales = zoneOrders.reduce((acc, o) => acc + (Number(o.amount) || 0), 0);
-        return {
-          zone: z.name,
-          hotels: zoneHotels,
-          joiners: zoneJoiners,
-          orders: zoneOrders.length,
-          delivered: deliveredCount,
-          sales: `₹${totalSales.toLocaleString('en-IN')}`
-        };
-      })
-    : [
-        { zone: 'Kharadi', hotels: 120, joiners: 5, orders: 35, delivered: 30, sales: '₹85,000' },
-        { zone: 'Viman Nagar', hotels: 80, joiners: 3, orders: 22, delivered: 19, sales: '₹52,000' },
-        { zone: 'Hinjawadi', hotels: 150, joiners: 8, orders: 48, delivered: 42, sales: '₹1,10,000' },
-        { zone: 'Magarpatta', hotels: 95, joiners: 4, orders: 28, delivered: 24, sales: '₹68,000' },
-        { zone: 'Hadapsar', hotels: 110, joiners: 6, orders: 32, delivered: 28, sales: '₹75,000' }
-      ];
+  const zonesData = zones.map(z => {
+    const zoneHotels = hotels.filter(h => (h.zone || '').trim().toLowerCase() === (z.name || '').trim().toLowerCase()).length;
+    const zoneJoiners = joiners.filter(j => (j.zone || '').trim().toLowerCase() === (z.name || '').trim().toLowerCase()).length;
+    const zoneOrders = orders.filter(o => (o.zone || '').trim().toLowerCase() === (z.name || '').trim().toLowerCase());
+    const deliveredCount = zoneOrders.filter(o => o.status === 'Delivered').length;
+    const totalSales = zoneOrders.reduce((acc, o) => acc + (Number(o.amount) || 0), 0);
+    return {
+      zone: z.name,
+      hotels: zoneHotels,
+      joiners: zoneJoiners,
+      orders: zoneOrders.length,
+      delivered: deliveredCount,
+      sales: `₹${totalSales.toLocaleString('en-IN')}`
+    };
+  });
 
   return (
     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between h-full">
@@ -101,9 +93,7 @@ export const ZonePerformanceTable: React.FC = () => {
                   {zonesData.reduce((acc, z) => acc + z.delivered, 0)}
                 </td>
                 <td className="py-2 px-1.5 text-right text-[#168a44]">
-                  {isDatabaseConnected
-                    ? `₹${orders.reduce((acc, o) => acc + (Number(o.amount) || 0), 0).toLocaleString('en-IN')}`
-                    : '₹3,90,000'}
+                  ₹{orders.reduce((acc, o) => acc + (Number(o.amount) || 0), 0).toLocaleString('en-IN')}
                 </td>
               </tr>
             )}

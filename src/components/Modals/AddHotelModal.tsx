@@ -7,7 +7,7 @@ export const AddHotelModal: React.FC = () => {
 
   const [name, setName] = useState('');
   const [zone, setZone] = useState(zones[0]?.name || 'Kharadi');
-  const [joiner, setJoiner] = useState(joiners[0]?.name || 'Rahul Patil');
+  const [joiner, setJoiner] = useState(joiners[0]?.name || '');
   const [contactPerson, setContactPerson] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');

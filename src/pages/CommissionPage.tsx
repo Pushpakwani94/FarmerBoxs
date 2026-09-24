@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { saveRecord } from '../firebase/dbService';
 import {
   CircleDollarSign,
   Wallet,
@@ -37,60 +38,111 @@ import { JoinerCommissionHistoryModal } from '../components/Modals/JoinerCommiss
 import { EditCommissionModal } from '../components/Modals/EditCommissionModal';
 
 export const CommissionPage: React.FC = () => {
-  const { joiners, orders, isDatabaseConnected } = useApp();
+  const { joiners, orders, isDatabaseConnected, updateJoiner } = useApp();
 
   // Dynamically compute commission list from live Firestore / state data
   const dynamicCommissionList = useMemo<JoinerCommissionRecord[]>(() => {
-    if (joiners.length === 0 && isDatabaseConnected) {
-      return [];
-    }
-    if (joiners.length === 0) {
-      return initialCommissionList;
-    }
-    return joiners.map((j, idx) => {
-      const jOrders = orders.filter(
-        o => o.joiner?.toLowerCase() === j.name?.toLowerCase() || String(o.joiner) === String(j.id)
-      );
-      const deliveredOrders = jOrders.filter(o => o.status === 'Delivered').length;
-      const totalOrdersCount = jOrders.length > 0 ? jOrders.length : (j.totalOrders || 0);
-      const commissionRate = 100;
-      const totalCommission = jOrders.length > 0
-        ? deliveredOrders * commissionRate
-        : (j.totalEarnings || deliveredOrders * commissionRate);
-      const paidAmount = j.paidAmount || 0;
-      const pendingAmount = Math.max(0, totalCommission - paidAmount);
-      const status: 'Paid' | 'Pending' = pendingAmount <= 0 ? 'Paid' : 'Pending';
+    const sourceJoiners = joiners.length > 0 ? joiners : (isDatabaseConnected ? [] : initialCommissionList);
 
-      const recentTransactions: CommissionTransaction[] = jOrders.slice(0, 5).map(o => ({
-        id: `TXN-${o.id}`,
-        date: o.date,
-        orderId: o.id,
-        hotelName: o.hotelName,
-        amount: commissionRate,
-        status: o.status === 'Delivered' ? 'Paid' : 'Pending'
-      }));
+    return sourceJoiners.map((j: any, idx: number) => {
+      const cleanName = (j.name || '').trim().toLowerCase();
+      const cleanPhone = (j.mobile || j.phone || '').trim().replace(/\D/g, '');
+      const cleanId = String(j.id || '').trim().toLowerCase();
+
+      const jOrders = orders.filter(o => {
+        const oJoiner = (o.joiner || (o as any).assignedJoiner || '').trim().toLowerCase();
+        const oJoinerId = String((o as any).joinerId || (o as any).joinedBy || '').trim().toLowerCase();
+        const oPhone = String((o as any).joinerPhone || (o as any).mobile || '').trim().replace(/\D/g, '');
+
+        const nameMatch = Boolean(
+          cleanName.length >= 2 && oJoiner.length >= 2 && (
+            oJoiner === cleanName ||
+            (cleanName.length >= 3 && oJoiner.includes(cleanName)) ||
+            (oJoiner.length >= 3 && cleanName.includes(oJoiner))
+          )
+        );
+        const phoneMatch = Boolean(
+          cleanPhone.length >= 6 && (
+            (oPhone.length >= 6 && (oPhone.includes(cleanPhone) || cleanPhone.includes(oPhone))) ||
+            (oJoinerId.length >= 6 && (oJoinerId.includes(cleanPhone) || cleanPhone.includes(oJoinerId)))
+          )
+        );
+        const idMatch = Boolean(
+          cleanId.length >= 1 && oJoinerId.length >= 1 && (
+            oJoinerId === cleanId ||
+            oJoiner === cleanId ||
+            (cleanId.length >= 4 && oJoinerId.includes(cleanId))
+          )
+        );
+
+        return nameMatch || phoneMatch || idMatch;
+      });
+
+      // Count completed / delivered orders ONLY for commission
+      const deliveredOrdersCount = jOrders.filter(o => o.status === 'Delivered' || (o.status as string) === 'Completed').length;
+      // Pending orders (awaiting delivery / in progress)
+      const pendingOrdersCount = jOrders.filter(o => o.status !== 'Delivered' && (o.status as string) !== 'Completed' && o.status !== 'Cancelled').length;
+
+      const totalOrdersCount = jOrders.length > 0 ? jOrders.length : Number(j.totalOrders || 0);
+      const completedCount = jOrders.length > 0 ? deliveredOrdersCount : Number(j.completedOrders || j.deliveredOrders || 0);
+      const pendingCount = jOrders.length > 0 ? pendingOrdersCount : Math.max(0, totalOrdersCount - completedCount);
+      const commissionRate = 100;
+      
+      // Dynamic cumulative commission: DO NOT REMOVE IF ORDERS ARE REMOVED
+      // Math.max between live delivered order commission and any stored / historical earnings
+      const liveDeliveredEarnings = completedCount * commissionRate;
+      const recordedEarnings = Number(j.totalEarnings ?? j.commission ?? j.accumulatedCommission ?? 0);
+      const totalCommission = Math.max(recordedEarnings, liveDeliveredEarnings);
+
+      // Paid Amount & Dynamic Pending reduction
+      const paidAmount = Number(j.paidAmount || 0);
+      const pendingAmount = Math.max(0, totalCommission - paidAmount);
+      const status: 'Paid' | 'Pending' = pendingAmount <= 0 && (totalCommission > 0 || paidAmount > 0) ? 'Paid' : 'Pending';
+
+      const recentTransactions: CommissionTransaction[] = jOrders.length > 0
+        ? jOrders.slice(0, 5).map(o => ({
+            id: `TXN-${o.id}`,
+            date: o.date || 'Today',
+            orderId: String(o.id || o.orderId),
+            hotelName: o.hotelName || 'Partner Hotel',
+            amount: Number((o as any).commission || commissionRate),
+            status: (o.status === 'Delivered' || (o.status as string) === 'Completed') ? 'Paid' : 'Pending'
+          }))
+        : (j.recentTransactions && j.recentTransactions.length > 0
+            ? j.recentTransactions
+            : [
+                {
+                  id: `TXN-${Date.now().toString().slice(-4)}`,
+                  date: 'Today',
+                  orderId: `FB${Math.floor(1000 + Math.random() * 9000)}`,
+                  hotelName: 'Hotel Partner',
+                  amount: 100,
+                  status: 'Paid'
+                }
+              ]
+          );
 
       return {
         id: j.id || (idx + 1),
-        name: j.name,
-        mobile: j.mobile,
+        name: j.name || 'Joiner',
+        mobile: j.mobile || j.phone || '9876543210',
         zone: j.zone || 'Kharadi',
         totalOrders: totalOrdersCount,
-        deliveredOrders: deliveredOrders,
+        completedOrders: completedCount,
+        deliveredOrders: completedCount,
+        pendingOrders: pendingCount,
         commissionRate,
         commission: totalCommission,
         paidAmount,
         pendingAmount,
         status,
         avatar: j.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-        upiId: `${j.name.toLowerCase().replace(/\s+/g, '')}@okaxis`,
-        bankName: 'HDFC Bank',
-        accountNo: '•••• •••• 4521',
-        ifscCode: 'HDFC0001234',
+        upiId: j.upiId || `${(j.name || 'joiner').toLowerCase().replace(/\s+/g, '')}@okaxis`,
+        bankName: j.bankName || 'HDFC Bank',
+        accountNo: j.accountNo || '•••• •••• 4521',
+        ifscCode: j.ifscCode || 'HDFC0001234',
         walletBalance: pendingAmount,
-        recentTransactions: recentTransactions.length > 0 ? recentTransactions : [
-          { id: 'TXN101', date: 'Today', orderId: 'FB1001', hotelName: 'Hotel Shiv Sagar', amount: 100, status: 'Paid' }
-        ]
+        recentTransactions
       };
     });
   }, [joiners, orders, isDatabaseConnected]);
@@ -108,8 +160,11 @@ export const CommissionPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'Commission List' | 'Joiner Wallets' | 'Payment History' | 'Payout Requests'>('Commission List');
 
   // Selected Joiner for Right Drawer
-  const [selectedJoinerId, setSelectedJoinerId] = useState<number>(1);
-  const activeJoiner = commissionList.find(j => j.id === selectedJoinerId) || commissionList[0];
+  const [selectedJoinerId, setSelectedJoinerId] = useState<number | string>(1);
+  const activeJoiner = commissionList.find(j => String(j.id) === String(selectedJoinerId)) || commissionList[0];
+
+  // Specific target for Payout modal
+  const [payoutTargetJoiner, setPayoutTargetJoiner] = useState<JoinerCommissionRecord | null>(null);
 
   // Filters
   const [zoneFilter, setZoneFilter] = useState<string>('All Zones');
@@ -124,7 +179,7 @@ export const CommissionPage: React.FC = () => {
   const itemsPerPage = 10;
 
   // Checkbox selection
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
 
   // Modals state
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState<boolean>(false);
@@ -183,7 +238,7 @@ export const CommissionPage: React.FC = () => {
     }
   };
 
-  const handleToggleRow = (id: number) => {
+  const handleToggleRow = (id: number | string) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
@@ -191,14 +246,15 @@ export const CommissionPage: React.FC = () => {
 
   // Export CSV function
   const handleExportCSV = () => {
-    const headers = ["#", "Joiner Name", "Mobile", "Zone", "Total Orders", "Delivered Orders", "Commission Rate", "Total Commission", "Paid Amount", "Pending Amount", "Status"];
+    const headers = ["#", "Joiner Name", "Mobile", "Zone", "Total Orders", "Completed Orders", "Pending Orders", "Commission Rate", "Total Commission", "Paid Amount", "Pending Amount", "Status"];
     const rows = filteredList.map(j => [
       j.id,
       `"${j.name}"`,
       `"${j.mobile}"`,
       `"${j.zone}"`,
       j.totalOrders,
-      j.deliveredOrders,
+      j.completedOrders ?? j.deliveredOrders,
+      j.pendingOrders ?? 0,
       `"₹${j.commissionRate}"`,
       `"₹${j.commission}"`,
       `"₹${j.paidAmount}"`,
@@ -216,27 +272,35 @@ export const CommissionPage: React.FC = () => {
     showToast('Exported Commission List to CSV successfully!');
   };
 
-  // Payment Success Handler
-  const handlePaymentSuccess = (joinerId: number, amount: number, mode: string, txnRef: string) => {
+  // Payment Success Handler - Live deduction and Firestore persistence
+  const handlePaymentSuccess = async (joinerId: number | string, amount: number, mode: string, txnRef: string) => {
+    const targetJoiner = commissionList.find(j => String(j.id) === String(joinerId)) || payoutTargetJoiner || activeJoiner;
+    const targetName = targetJoiner?.name || 'Joiner';
+    const currentPaid = Number(targetJoiner?.paidAmount || 0);
+    const newPaid = currentPaid + amount;
+    const currentTotalComm = Number(targetJoiner?.commission || 0);
+    const newTotalComm = Math.max(currentTotalComm, newPaid);
+    const newPending = Math.max(0, newTotalComm - newPaid);
+
+    const newTx: CommissionTransaction = {
+      id: txnRef,
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      orderId: `FB${Math.floor(1000 + Math.random() * 9000)}`,
+      amount: amount,
+      status: 'Paid',
+      paymentMode: mode,
+      utr: txnRef
+    };
+
     setCommissionList(prev =>
       prev.map(j => {
-        if (j.id === joinerId) {
-          const newPaid = j.paidAmount + amount;
-          const newPending = Math.max(0, j.commission - newPaid);
-          const newTx = {
-            id: txnRef,
-            date: '11 Sep 2026',
-            orderId: `FB${Math.floor(1000 + Math.random() * 9000)}`,
-            amount: amount,
-            status: 'Paid' as const,
-            paymentMode: mode,
-            utr: txnRef
-          };
+        if (String(j.id) === String(joinerId)) {
           return {
             ...j,
+            commission: newTotalComm,
             paidAmount: newPaid,
             pendingAmount: newPending,
-            walletBalance: Math.max(0, j.walletBalance - amount),
+            walletBalance: newPending,
             status: newPending === 0 ? 'Paid' : 'Pending',
             recentTransactions: [newTx, ...(j.recentTransactions || []).slice(0, 4)]
           };
@@ -245,21 +309,53 @@ export const CommissionPage: React.FC = () => {
       })
     );
 
+    // Save payment in Firestore 'payments' collection
+    const dateTimeStr = `${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const paymentRecord = {
+      id: txnRef,
+      transactionId: txnRef,
+      joinerId: String(joinerId),
+      joinerName: targetName,
+      mobile: targetJoiner?.mobile || '',
+      zone: targetJoiner?.zone || 'Kharadi',
+      amount: amount,
+      paymentMethod: mode,
+      status: 'Completed',
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      dateTime: dateTimeStr
+    };
+    saveRecord('payments', paymentRecord, txnRef);
+
+    // Update Joiner in Firestore 'joiners' collection and AppContext
+    const joinerUpdateData = {
+      paidAmount: newPaid,
+      pendingAmount: newPending,
+      totalEarnings: newTotalComm,
+      commission: newTotalComm,
+      status: (newPending === 0 ? 'Paid' : 'Pending') as any
+    };
+    
+    if (updateJoiner) {
+      updateJoiner(joinerId, joinerUpdateData);
+    }
+    saveRecord('joiners', { id: joinerId, ...joinerUpdateData }, String(joinerId));
+
     // Add to Payment History
     const historyItem = {
       id: txnRef,
-      date: '11 Sep 2026, 11:30 AM',
-      joinerName: activeJoiner.name,
-      mobile: activeJoiner.mobile,
-      zone: activeJoiner.zone,
+      date: dateTimeStr,
+      joinerName: targetName,
+      mobile: targetJoiner?.mobile || '',
+      zone: targetJoiner?.zone || '',
       amount: amount,
       mode: mode,
       utr: txnRef,
-      status: 'Completed'
+      status: 'Completed' as const
     };
     setPaymentHistory(prev => [historyItem, ...prev]);
 
-    showToast(`Payment of ₹${amount.toLocaleString('en-IN')} disbursed to ${activeJoiner.name}!`);
+    showToast(`Payment of ₹${amount.toLocaleString('en-IN')} disbursed to ${targetName}! Pending reduced to ₹${newPending.toLocaleString('en-IN')}`);
   };
 
   // Edit Joiner Save Handler
@@ -581,9 +677,12 @@ export const CommissionPage: React.FC = () => {
                       <th className="py-2.5 px-3">Joiner Name</th>
                       <th className="py-2.5 px-3">Mobile</th>
                       <th className="py-2.5 px-3">Zone</th>
-                      <th className="py-2.5 px-2 text-center">Total Orders</th>
-                      <th className="py-2.5 px-2 text-center">Delivered Orders</th>
-                      <th className="py-2.5 px-3 text-right">Commission (₹100/order)</th>
+                      <th className="py-2.5 px-2 text-center" title="Total orders assigned">Total Orders</th>
+                      <th className="py-2.5 px-2 text-center text-emerald-800" title="Delivered & commission earned">Completed Orders</th>
+                      <th className="py-2.5 px-2 text-center text-amber-700" title="Awaiting delivery / in progress (not included in completed commission)">Pending Orders</th>
+                      <th className="py-2.5 px-2 text-right">Total Commission</th>
+                      <th className="py-2.5 px-2 text-right">Paid</th>
+                      <th className="py-2.5 px-2 text-right">Pending</th>
                       <th className="py-2.5 px-3 text-center">Status</th>
                       <th className="py-2.5 px-3 text-center">Actions</th>
                     </tr>
@@ -593,6 +692,8 @@ export const CommissionPage: React.FC = () => {
                       paginatedList.map(j => {
                         const isSelected = selectedJoinerId === j.id;
                         const isChecked = selectedIds.includes(j.id);
+                        const completedCount = j.completedOrders ?? j.deliveredOrders ?? 0;
+                        const pendingCount = j.pendingOrders ?? Math.max(0, j.totalOrders - completedCount);
                         return (
                           <tr
                             key={j.id}
@@ -613,7 +714,7 @@ export const CommissionPage: React.FC = () => {
                                 className="rounded text-emerald-600 focus:ring-emerald-500"
                               />
                             </td>
-                            <td className="py-2.5 px-2 font-medium text-slate-500">{j.id}</td>
+                            <td className="py-2.5 px-2 font-medium text-slate-500 font-mono text-[11px]">{j.id}</td>
                             <td className="py-2.5 px-3">
                               <div className="flex items-center gap-2">
                                 <img
@@ -621,17 +722,39 @@ export const CommissionPage: React.FC = () => {
                                   alt={j.name}
                                   className="w-7 h-7 rounded-full object-cover border border-slate-200"
                                 />
-                                <span className="font-bold text-slate-800 hover:text-emerald-700">
-                                  {j.name}
-                                </span>
+                                <div>
+                                  <span className="font-bold text-slate-800 hover:text-emerald-700 block">
+                                    {j.name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">₹{j.commissionRate}/delivered order</span>
+                                </div>
                               </div>
                             </td>
                             <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">{j.mobile}</td>
                             <td className="py-2.5 px-3 text-slate-700 font-medium">{j.zone}</td>
-                            <td className="py-2.5 px-2 text-center font-bold text-slate-800">{j.totalOrders}</td>
-                            <td className="py-2.5 px-2 text-center font-bold text-slate-800">{j.deliveredOrders}</td>
-                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                            <td className="py-2.5 px-2 text-center font-bold text-slate-800">
+                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11px]">
+                                {j.totalOrders}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center font-bold text-emerald-800">
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono text-[11px]">
+                                {completedCount}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center font-bold text-amber-800">
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-mono text-[11px]">
+                                {pendingCount}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-extrabold text-slate-900 font-mono">
                               ₹{j.commission.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-bold text-emerald-700 font-mono">
+                              ₹{j.paidAmount.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-bold text-amber-700 font-mono">
+                              ₹{j.pendingAmount.toLocaleString('en-IN')}
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <span
@@ -645,23 +768,37 @@ export const CommissionPage: React.FC = () => {
                               </span>
                             </td>
                             <td className="py-2.5 px-3 text-center">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedJoinerId(j.id);
-                                }}
-                                title="View Details"
-                                className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedJoinerId(j.id);
+                                    setPayoutTargetJoiner(j);
+                                    setIsPayoutModalOpen(true);
+                                  }}
+                                  title="Pay Commission"
+                                  className="px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10px] font-bold cursor-pointer transition-colors"
+                                >
+                                  Pay
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedJoinerId(j.id);
+                                  }}
+                                  title="View Details"
+                                  className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
                       })
                     ) : (
                       <tr>
-                        <td colSpan={10} className="py-10 text-center text-slate-400 font-medium">
+                        <td colSpan={13} className="py-10 text-center text-slate-400 font-medium">
                           No joiners match the selected filters.
                         </td>
                       </tr>
@@ -953,46 +1090,54 @@ export const CommissionPage: React.FC = () => {
               </div>
             </div>
 
-            {/* 4 Stat Badges (2x2 Grid) */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            {/* 6 Stat Badges (3x2 Grid) */}
+            <div className="grid grid-cols-3 gap-2 text-xs">
               {/* Total Orders */}
-              <div className="bg-sky-50 p-2.5 rounded-lg border border-sky-100 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Total Orders</p>
-                  <p className="font-bold text-sky-950 text-base">{activeJoiner.totalOrders}</p>
-                </div>
-                <span className="text-xl">📦</span>
+              <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 flex flex-col justify-between">
+                <span className="text-[10px] text-slate-500 font-medium">Total Orders</span>
+                <p className="font-bold text-slate-900 text-sm mt-0.5">{activeJoiner.totalOrders}</p>
+                <span className="text-[10px] text-slate-400">Assigned 📦</span>
               </div>
 
-              {/* Delivered Orders */}
-              <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Delivered Orders</p>
-                  <p className="font-bold text-emerald-950 text-base">{activeJoiner.deliveredOrders}</p>
-                </div>
-                <span className="text-xl">✅</span>
+              {/* Completed Orders */}
+              <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex flex-col justify-between">
+                <span className="text-[10px] text-emerald-800 font-medium">Completed</span>
+                <p className="font-bold text-emerald-950 text-sm mt-0.5">{activeJoiner.completedOrders ?? activeJoiner.deliveredOrders}</p>
+                <span className="text-[10px] text-emerald-600">Earned comm ✅</span>
+              </div>
+
+              {/* Pending Orders */}
+              <div className="bg-amber-50 p-2 rounded-lg border border-amber-100 flex flex-col justify-between">
+                <span className="text-[10px] text-amber-800 font-medium">Pending Orders</span>
+                <p className="font-bold text-amber-950 text-sm mt-0.5">{activeJoiner.pendingOrders ?? Math.max(0, activeJoiner.totalOrders - (activeJoiner.completedOrders ?? activeJoiner.deliveredOrders))}</p>
+                <span className="text-[10px] text-amber-600">Awaiting ⏳</span>
               </div>
 
               {/* Total Commission */}
-              <div className="bg-amber-50 p-2.5 rounded-lg border border-amber-100 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Total Commission</p>
-                  <p className="font-bold text-amber-950 text-base">
-                    ₹{activeJoiner.commission.toLocaleString('en-IN')}
-                  </p>
-                </div>
-                <span className="text-xl">💰</span>
+              <div className="bg-blue-50 p-2 rounded-lg border border-blue-100 flex flex-col justify-between">
+                <span className="text-[10px] text-blue-800 font-medium">Total Comm</span>
+                <p className="font-bold text-blue-950 text-sm mt-0.5">
+                  ₹{activeJoiner.commission.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[10px] text-blue-600">Lifetime 💰</span>
               </div>
 
               {/* Paid Amount */}
-              <div className="bg-purple-50 p-2.5 rounded-lg border border-purple-100 flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Paid Amount</p>
-                  <p className="font-bold text-purple-950 text-base">
-                    ₹{activeJoiner.paidAmount.toLocaleString('en-IN')}
-                  </p>
-                </div>
-                <span className="text-xl">💳</span>
+              <div className="bg-purple-50 p-2 rounded-lg border border-purple-100 flex flex-col justify-between">
+                <span className="text-[10px] text-purple-800 font-medium">Paid Amount</span>
+                <p className="font-bold text-purple-950 text-sm mt-0.5">
+                  ₹{activeJoiner.paidAmount.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[10px] text-purple-600">Disbursed 💳</span>
+              </div>
+
+              {/* Pending Commission */}
+              <div className="bg-rose-50 p-2 rounded-lg border border-rose-100 flex flex-col justify-between">
+                <span className="text-[10px] text-rose-800 font-medium">Pending Comm</span>
+                <p className="font-bold text-rose-950 text-sm mt-0.5">
+                  ₹{activeJoiner.pendingAmount.toLocaleString('en-IN')}
+                </p>
+                <span className="text-[10px] text-rose-600">To pay ⚖️</span>
               </div>
             </div>
 
@@ -1059,7 +1204,10 @@ export const CommissionPage: React.FC = () => {
 
             {/* Make Commission Payment Button */}
             <button
-              onClick={() => setIsPayoutModalOpen(true)}
+              onClick={() => {
+                setPayoutTargetJoiner(activeJoiner);
+                setIsPayoutModalOpen(true);
+              }}
               className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <Send className="w-4 h-4" /> Make Commission Payment
@@ -1075,12 +1223,15 @@ export const CommissionPage: React.FC = () => {
   </div>
 
   {/* Interactive Modals */}
-  {activeJoiner && (
+  {(payoutTargetJoiner || activeJoiner) && (
     <>
       <MakePayoutModal
         isOpen={isPayoutModalOpen}
-        onClose={() => setIsPayoutModalOpen(false)}
-        joiner={activeJoiner}
+        onClose={() => {
+          setIsPayoutModalOpen(false);
+          setPayoutTargetJoiner(null);
+        }}
+        joiner={payoutTargetJoiner || activeJoiner}
         onPaymentSuccess={handlePaymentSuccess}
       />
 

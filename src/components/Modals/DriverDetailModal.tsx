@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Truck, Phone, Mail, MapPin, Star, Shield, Award, Calendar, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { X, Truck, Phone, Mail, MapPin, Star, Shield, Award, Calendar, CheckCircle2, Clock, AlertTriangle, Trash2 } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 import type { Driver } from '../../types';
 
 interface DriverDetailModalProps {
@@ -17,6 +18,7 @@ export const DriverDetailModal: React.FC<DriverDetailModalProps> = ({
   onEdit,
   onToggleStatus
 }) => {
+  const { deleteDriver } = useApp();
   if (!isOpen || !driver) return null;
 
   return (
@@ -204,6 +206,18 @@ export const DriverDetailModal: React.FC<DriverDetailModalProps> = ({
               className="px-3 py-1.5 rounded-lg font-semibold text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 cursor-pointer"
             >
               Edit Driver
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to delete driver ${driver.name}?`)) {
+                  deleteDriver(driver.id);
+                  onClose();
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg font-semibold text-xs bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 cursor-pointer flex items-center gap-1 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>Delete</span>
             </button>
           </div>
 

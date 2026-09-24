@@ -17,30 +17,51 @@ export const JoinerHotelsModal: React.FC<JoinerHotelsModalProps> = ({ isOpen, on
   const [sortBy, setSortBy] = useState<'orders-desc' | 'orders-asc' | 'name' | 'date'>('orders-desc');
 
   const allHotels = useMemo(() => {
+    if (!joiner) return [];
+    // Check if live hotels in AppContext belong to this joiner
+    const liveJoinerHotels = hotels.filter(h =>
+      (h.joiner && joiner.name && h.joiner.toLowerCase() === joiner.name.toLowerCase()) ||
+      (h.joinerId && String(h.joinerId) === String(joiner.id))
+    );
+
+    if (liveJoinerHotels.length > 0) {
+      return liveJoinerHotels.map((h, idx) => ({
+        id: typeof h.id === 'number' ? h.id : idx + 1,
+        name: h.name || `Hotel ${idx + 1}`,
+        location: h.zone || joiner.zone || 'Pune',
+        owner: h.ownerName || h.contactPerson || 'Hotel Manager',
+        phone: h.mobile || h.phone || '9876543210',
+        orders: h.totalOrders || 12,
+        joinedDate: h.registrationDate || h.joinedDate || '2024-02-01',
+        status: h.status || 'Active'
+      }));
+    }
+
     return getHotelsForJoiner(joiner);
-  }, [joiner]);
+  }, [joiner, hotels]);
 
   const filteredHotels = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
     return allHotels
       .filter(h => {
-        const matchesSearch =
-          h.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          h.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (h.owner && h.owner.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (h.phone && h.phone.includes(searchTerm));
-        const matchesStatus = statusFilter === 'All' || h.status === statusFilter;
+        const hName = (h.name || '').toLowerCase();
+        const hLoc = (h.location || '').toLowerCase();
+        const hOwner = (h.owner || '').toLowerCase();
+        const hPhone = String(h.phone || '');
+        const matchesSearch = !term || hName.includes(term) || hLoc.includes(term) || hOwner.includes(term) || hPhone.includes(term);
+        const matchesStatus = statusFilter === 'All' || (h.status || 'Active') === statusFilter;
         return matchesSearch && matchesStatus;
       })
       .sort((a, b) => {
         if (sortBy === 'orders-desc') return (b.orders || 0) - (a.orders || 0);
         if (sortBy === 'orders-asc') return (a.orders || 0) - (b.orders || 0);
-        if (sortBy === 'name') return a.name.localeCompare(b.name);
+        if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
         if (sortBy === 'date') return (b.joinedDate || '').localeCompare(a.joinedDate || '');
         return 0;
       });
   }, [allHotels, searchTerm, statusFilter, sortBy]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !joiner) return null;
 
   const activeCount = allHotels.filter(h => h.status === 'Active').length;
   const inactiveCount = allHotels.filter(h => h.status === 'Inactive').length;
