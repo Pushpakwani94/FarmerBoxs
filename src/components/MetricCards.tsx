@@ -104,7 +104,7 @@ export const MetricCards: React.FC = () => {
     {
       title: 'Joiner Commission',
       value: `₹${totalCommission.toLocaleString('en-IN')}`,
-      subtext: `${deliveredOrders} orders × ₹100`,
+      subtext: `${deliveredOrders} orders × ₹100 daily new orders`,
       bgColor: 'bg-[#f0f9ff]',
       iconBg: 'bg-[#bae6fd] text-[#0284c7]',
       icon: Coins,
