@@ -32,7 +32,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { saveRecord, clearLocalDummyCache } from '../firebase/dbService';
 import { currentFirebaseConfig } from '../firebase/config';
-import { authService, type AdminAccessRequest } from '../firebase/authService';
+import { authService, type AdminAccessRequest, type SubAdminAccount } from '../firebase/authService';
 
 export const SettingsPage: React.FC = () => {
   const {
@@ -77,7 +77,20 @@ export const SettingsPage: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // User Management State
+  // Sub-Admin & Zone Admin Management State
+  const [subAdminsList, setSubAdminsList] = useState<SubAdminAccount[]>(() => {
+    return authService.getSubAdminAccounts();
+  });
+  const [isAddSubAdminOpen, setIsAddSubAdminOpen] = useState(false);
+  const [subAdminName, setSubAdminName] = useState('');
+  const [subAdminEmail, setSubAdminEmail] = useState('');
+  const [subAdminPhone, setSubAdminPhone] = useState('');
+  const [subAdminRole, setSubAdminRole] = useState<'Zone Admin' | 'Operations Sub-Admin' | 'Finance Sub-Admin' | 'Dispatch Manager' | 'Sub Admin'>('Zone Admin');
+  const [subAdminZone, setSubAdminZone] = useState('Kharadi Zone');
+  const [subAdminPassword, setSubAdminPassword] = useState('Admin@123');
+  const [subAdminPermissions, setSubAdminPermissions] = useState<string[]>(['orders', 'drivers', 'hotels', 'joiners', 'inventory']);
+
+  // User Management State (Legacy Table)
   const [usersList, setUsersList] = useState([
     { id: 1, name: 'Pushpak Wani', email: 'admin@farmerbox.com', role: 'Super Admin', status: 'Active' },
     { id: 2, name: 'Sneha Patil', email: 'sneha@farmerbox.com', role: 'Admin', status: 'Active' },
@@ -85,30 +98,59 @@ export const SettingsPage: React.FC = () => {
     { id: 4, name: 'Priya Deshmukh', email: 'priya@farmerbox.com', role: 'Finance', status: 'Active' },
     { id: 5, name: 'Rohan More', email: 'rohan@farmerbox.com', role: 'Support', status: 'Inactive' }
   ]);
-  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState('Admin');
 
   // Super Admin Access Requests State
   const [accessRequests, setAccessRequests] = useState<AdminAccessRequest[]>(() => {
     return authService.getAdminAccessRequests();
   });
 
+  const handleCreateSubAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subAdminName.trim() || !subAdminEmail.trim() || !subAdminPhone.trim()) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    try {
+      const created = await authService.createSubAdmin({
+        name: subAdminName.trim(),
+        email: subAdminEmail.trim(),
+        phone: subAdminPhone.trim(),
+        role: subAdminRole,
+        assignedZone: subAdminZone,
+        permissions: subAdminPermissions,
+        password: subAdminPassword.trim() || 'Admin@123'
+      });
+
+      setSubAdminsList(prev => [created, ...prev]);
+      setIsAddSubAdminOpen(false);
+      setSubAdminName('');
+      setSubAdminEmail('');
+      setSubAdminPhone('');
+      showToast(`Sub-Admin / Zone Admin "${created.name}" created successfully for ${created.assignedZone}!`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create sub-admin');
+    }
+  };
+
+  const handleToggleSubAdminStatus = (id: string, currentStatus: 'Active' | 'Inactive') => {
+    const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
+    const updated = authService.updateSubAdmin(id, { status: newStatus });
+    setSubAdminsList(updated);
+    showToast(`Sub-admin status changed to ${newStatus}`);
+  };
+
+  const handleDeleteSubAdmin = (id: string, name: string) => {
+    if (confirm(`Remove Sub-Admin privileges for "${name}"? They will no longer be able to log in.`)) {
+      const updated = authService.deleteSubAdmin(id);
+      setSubAdminsList(updated);
+      showToast(`Sub-Admin "${name}" removed successfully.`);
+    }
+  };
+
   const handleApproveAccessRequest = (req: AdminAccessRequest) => {
     const updated = authService.updateAdminAccessRequestStatus(req.id, 'APPROVED', 'Pushpak Wani (Super Admin)');
     setAccessRequests(updated);
-    // Also add to authorized users table
-    setUsersList(prev => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        name: req.name,
-        email: req.email,
-        role: req.requestedRole || 'Admin',
-        status: 'Active'
-      }
-    ]);
     showToast(`Access GRANTED for ${req.name} (${req.requestedRole}). User can now log in!`);
   };
 
@@ -1090,18 +1132,27 @@ export const SettingsPage: React.FC = () => {
             )}
           </div>
 
-          {/* 2. Active Authorized Admin Team */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          {/* 2. Sub-Admins & Zone Admins Managed by Super Admin Pushpak Wani */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
-                <h3 className="font-bold text-sm text-slate-800">Authorized Admin Users</h3>
-                <p className="text-[11px] text-slate-500">Active personnel permitted to access the console</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-sm text-slate-900">Sub-Admins & Zone Administrators</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Governed by Super Admin
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Super Admin (Pushpak Wani) creates and assigns sub-admins to specific operational zones with granular module permissions.
+                </p>
               </div>
               <button
-                onClick={() => setIsAddUserOpen(true)}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+                type="button"
+                onClick={() => setIsAddSubAdminOpen(true)}
+                className="px-3.5 py-2 bg-[#15803d] hover:bg-[#166534] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs transition-all self-start sm:self-auto"
               >
-                <Plus className="w-3.5 h-3.5" /> Add User
+                <Plus className="w-4 h-4" />
+                <span>Create Zone / Sub-Admin</span>
               </button>
             </div>
 
@@ -1109,48 +1160,106 @@ export const SettingsPage: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
-                    <th className="py-2 px-3">#</th>
-                    <th className="py-2 px-3">Name</th>
-                    <th className="py-2 px-3">Email</th>
-                    <th className="py-2 px-3">Role</th>
-                    <th className="py-2 px-3 text-center">Status</th>
-                    <th className="py-2 px-3 text-center">Actions</th>
+                    <th className="py-2.5 px-3">Administrator</th>
+                    <th className="py-2.5 px-3">Contact Details</th>
+                    <th className="py-2.5 px-3">Role</th>
+                    <th className="py-2.5 px-3">Assigned Zone</th>
+                    <th className="py-2.5 px-3">Module Permissions</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {usersList.map(u => (
-                    <tr key={u.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 text-slate-500">{u.id}</td>
-                      <td className="py-2.5 px-3 font-bold text-slate-800">
-                        {u.name} {u.role === 'Super Admin' && <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded font-extrabold ml-1">OWNER</span>}
+                  {/* Pushpak Wani Super Admin Row */}
+                  <tr className="bg-emerald-50/50 hover:bg-emerald-50">
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"
+                          alt="Pushpak Wani"
+                          className="w-7 h-7 rounded-full object-cover border border-emerald-600"
+                        />
+                        <div>
+                          <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                            <span>Pushpak Wani</span>
+                            <span className="text-[9px] bg-emerald-700 text-white font-black px-1.5 py-0.2 rounded">SUPER ADMIN (OWNER)</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono">HQ-SUPER-001</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="text-slate-800 font-medium">admin@farmerbox.com</div>
+                      <div className="text-[11px] text-slate-500">+91 98765 43210</div>
+                    </td>
+                    <td className="py-3 px-3 font-bold text-emerald-800">Super Admin</td>
+                    <td className="py-3 px-3">
+                      <span className="px-2.5 py-0.5 rounded-full font-bold text-[10.5px] bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        All Zones (HQ)
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="text-[10.5px] font-bold text-emerald-800">Full System Authority (100%)</span>
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-emerald-600 text-white shadow-2xs">
+                        Active Master
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <span className="text-[11px] text-slate-400 font-medium">Protected Owner</span>
+                    </td>
+                  </tr>
+
+                  {/* Sub Admins created by Super Admin */}
+                  {subAdminsList.map(sub => (
+                    <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-slate-900">{sub.name}</div>
+                        <span className="text-[10px] text-slate-400 font-mono">{sub.id}</span>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-600">{u.email}</td>
-                      <td className="py-2.5 px-3 text-slate-700 font-medium">{u.role}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                          u.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {u.status}
+                      <td className="py-3 px-3">
+                        <div className="text-slate-700 font-medium">{sub.email}</div>
+                        <div className="text-[11px] text-slate-500">{sub.phone}</div>
+                      </td>
+                      <td className="py-3 px-3 font-bold text-slate-800">{sub.role}</td>
+                      <td className="py-3 px-3">
+                        <span className="px-2 py-0.5 rounded-md font-bold text-[10.5px] bg-sky-50 text-sky-800 border border-sky-200">
+                          {sub.assignedZone}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => showToast(`Editing user ${u.name}`)}
-                            className="p-1 text-slate-500 hover:text-emerald-700 rounded hover:bg-slate-100 cursor-pointer"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          {u.role !== 'Super Admin' && (
-                            <button
-                              onClick={() => handleDeleteUser(u.id, u.name)}
-                              className="p-1 text-slate-500 hover:text-rose-600 rounded hover:bg-slate-100 cursor-pointer"
-                              title="Revoke access"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                      <td className="py-3 px-3">
+                        <div className="flex flex-wrap gap-1 max-w-xs">
+                          {sub.permissions.map(p => (
+                            <span key={p} className="px-1.5 py-0.2 bg-slate-100 text-slate-700 rounded text-[10px] font-medium border border-slate-200 uppercase">
+                              {p}
+                            </span>
+                          ))}
                         </div>
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSubAdminStatus(sub.id, sub.status)}
+                          className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] cursor-pointer transition-all ${
+                            sub.status === 'Active'
+                              ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800'
+                              : 'bg-rose-100 hover:bg-rose-200 text-rose-800'
+                          }`}
+                          title="Click to toggle status"
+                        >
+                          {sub.status}
+                        </button>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSubAdmin(sub.id, sub.name)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 cursor-pointer transition-colors"
+                          title="Revoke Sub-Admin Access"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1163,14 +1272,17 @@ export const SettingsPage: React.FC = () => {
 
       {/* TAB 4: ROLES & PERMISSIONS */}
       {(activeTab === 'Role & Permissions' || activeTab === 'All Settings') && (
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <h3 className="font-bold text-sm text-slate-800">Role & Permissions</h3>
+            <div>
+              <h3 className="font-bold text-sm text-slate-800">Role & Permission Hierarchy</h3>
+              <p className="text-[11px] text-slate-500">Privilege matrix governed by Super Admin Pushpak Wani</p>
+            </div>
             <button
-              onClick={() => showToast('New role dialog')}
-              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
+              onClick={() => setIsAddSubAdminOpen(true)}
+              className="px-3 py-1.5 bg-[#15803d] hover:bg-[#166534] text-white text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" /> Add Role
+              <Plus className="w-3.5 h-3.5" /> Create Sub-Admin Role
             </button>
           </div>
 
@@ -1180,32 +1292,24 @@ export const SettingsPage: React.FC = () => {
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
                   <th className="py-2 px-3">#</th>
                   <th className="py-2 px-3">Role Name</th>
+                  <th className="py-2 px-3">Operational Scope</th>
                   <th className="py-2 px-3">Description</th>
-                  <th className="py-2 px-3 text-center">Users</th>
-                  <th className="py-2 px-3 text-center">Actions</th>
+                  <th className="py-2 px-3 text-center">Active Admins</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {[
-                  { id: 1, role: 'Super Admin', desc: 'Full system access & security authority', users: 3 },
-                  { id: 2, role: 'Admin', desc: 'Manage all modules, hotels & joiners', users: 5 },
-                  { id: 3, role: 'Operations', desc: 'Manage daily orders, dispatch & drivers', users: 8 },
-                  { id: 4, role: 'Finance', desc: 'Handle commissions, payouts & reports', users: 4 },
-                  { id: 5, role: 'Support', desc: 'Client communication and ticket resolution', users: 6 }
+                  { id: 1, role: 'Super Admin', scope: 'All Zones (HQ)', desc: 'Full root authority over all modules, zones, payouts & security', count: '1 (Pushpak Wani)' },
+                  { id: 2, role: 'Zone Admin', scope: 'Specific Assigned Zone', desc: 'Manage orders, hotels, joiners and driver routes in their assigned zone', count: `${subAdminsList.filter(s => s.role === 'Zone Admin').length} Active` },
+                  { id: 3, role: 'Operations Sub-Admin', scope: 'Multi-Zone Fleet', desc: 'Dispatch routes, morning wholesale mandi procurement and logistics', count: `${subAdminsList.filter(s => s.role === 'Operations Sub-Admin').length} Active` },
+                  { id: 4, role: 'Finance Sub-Admin', scope: 'Accounts & Payouts', desc: 'Weekly joiner commission audits, GST invoice generation & payment batches', count: `${subAdminsList.filter(s => s.role === 'Finance Sub-Admin').length} Active` }
                 ].map(r => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="py-2.5 px-3 text-slate-500">{r.id}</td>
                     <td className="py-2.5 px-3 font-bold text-slate-800">{r.role}</td>
-                    <td className="py-2.5 px-3 text-slate-600">{r.desc}</td>
-                    <td className="py-2.5 px-3 text-center font-bold text-slate-800">{r.users}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <button
-                        onClick={() => showToast(`Configuring permissions for ${r.role}`)}
-                        className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer"
-                      >
-                        Edit Permissions
-                      </button>
-                    </td>
+                    <td className="py-2.5 px-3 font-medium text-emerald-700">{r.scope}</td>
+                    <td className="py-2.5 px-3 text-slate-600 max-w-md">{r.desc}</td>
+                    <td className="py-2.5 px-3 text-center font-bold text-slate-800">{r.count}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1214,70 +1318,167 @@ export const SettingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Add User Modal */}
-      {isAddUserOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+      {/* CREATE SUB-ADMIN / ZONE ADMIN MODAL */}
+      {isAddSubAdminOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-base text-slate-800">Add New Console User</h3>
-              <button onClick={() => setIsAddUserOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">Create Sub-Admin / Zone Admin</h3>
+                  <p className="text-[11px] text-slate-500">Authorized by Super Admin Pushpak Wani</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddSubAdminOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddUser} className="mt-4 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateSubAdminSubmit} className="mt-4 space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
+                <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
                 <input
                   type="text"
                   required
-                  value={newUserName}
-                  onChange={e => setNewUserName(e.target.value)}
-                  placeholder="Enter full name"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-emerald-600"
+                  value={subAdminName}
+                  onChange={e => setSubAdminName(e.target.value)}
+                  placeholder="e.g. Vikram Gaikwad"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Work Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={subAdminEmail}
+                    onChange={e => setSubAdminEmail(e.target.value)}
+                    placeholder="vikram@farmerbox.com"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Mobile Number (Login ID) *</label>
+                  <input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    value={subAdminPhone}
+                    onChange={e => setSubAdminPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="9822101020"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Role Designation</label>
+                  <select
+                    value={subAdminRole}
+                    onChange={e => setSubAdminRole(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium cursor-pointer"
+                  >
+                    <option value="Zone Admin">Zone Admin</option>
+                    <option value="Operations Sub-Admin">Operations Sub-Admin</option>
+                    <option value="Finance Sub-Admin">Finance Sub-Admin</option>
+                    <option value="Dispatch Manager">Dispatch Manager</option>
+                    <option value="Sub Admin">General Sub Admin</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Assigned Operational Zone *</label>
+                  <select
+                    value={subAdminZone}
+                    onChange={e => setSubAdminZone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium cursor-pointer"
+                  >
+                    <option value="All Zones (HQ)">All Zones (HQ)</option>
+                    {zones.map(z => (
+                      <option key={z.id} value={z.name}>{z.name}</option>
+                    ))}
+                    {zones.length === 0 && (
+                      <>
+                        <option value="Kharadi Zone">Kharadi Zone</option>
+                        <option value="Viman Nagar Zone">Viman Nagar Zone</option>
+                        <option value="Hinjawadi Zone">Hinjawadi Zone</option>
+                        <option value="Baner Zone">Baner Zone</option>
+                        <option value="Magarpatta Zone">Magarpatta Zone</option>
+                        <option value="Wakad Zone">Wakad Zone</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Email Address *</label>
+                <label className="block font-bold text-slate-700 mb-1">Login Password *</label>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  value={newUserEmail}
-                  onChange={e => setNewUserEmail(e.target.value)}
-                  placeholder="user@farmerbox.com"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-emerald-600"
+                  value={subAdminPassword}
+                  onChange={e => setSubAdminPassword(e.target.value)}
+                  placeholder="Set login password (e.g. Zone@123)"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
                 />
+                <p className="text-[10.5px] text-slate-500 mt-1">Sub-Admin will use their email or mobile number with this password to log in.</p>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Assigned Role</label>
-                <select
-                  value={newUserRole}
-                  onChange={e => setNewUserRole(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-emerald-600 font-medium"
-                >
-                  <option value="Admin">Admin</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Finance">Finance</option>
-                  <option value="Support">Support</option>
-                  <option value="Super Admin">Super Admin</option>
-                </select>
+                <label className="block font-bold text-slate-700 mb-1.5">Granted Module Permissions</label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  {[
+                    { id: 'orders', label: 'Orders & Live Dispatch' },
+                    { id: 'drivers', label: 'Drivers & Live Fleet' },
+                    { id: 'hotels', label: 'Hotel Partners' },
+                    { id: 'joiners', label: 'Joiner Network' },
+                    { id: 'inventory', label: 'Mandi Inventory' },
+                    { id: 'commission', label: 'Commission Payouts' }
+                  ].map(perm => (
+                    <label key={perm.id} className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={subAdminPermissions.includes(perm.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSubAdminPermissions(prev => [...prev, perm.id]);
+                          } else {
+                            setSubAdminPermissions(prev => prev.filter(p => p !== perm.id));
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-[#15803d] cursor-pointer"
+                      />
+                      <span className="text-slate-700 text-xs font-medium">{perm.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsAddUserOpen(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold cursor-pointer"
+                  onClick={() => setIsAddSubAdminOpen(false)}
+                  className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-xs cursor-pointer"
+                  className="px-6 py-2.5 bg-[#15803d] hover:bg-[#166534] text-white rounded-xl font-bold shadow-md shadow-emerald-950/20 flex items-center gap-1.5 cursor-pointer transition-all"
                 >
-                  Create User
+                  <Check className="w-4 h-4" />
+                  <span>Authorize & Create Sub-Admin</span>
                 </button>
               </div>
             </form>

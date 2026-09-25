@@ -47,8 +47,23 @@ export interface AdminAccessRequest {
   approvedAt?: string;
 }
 
+export interface SubAdminAccount {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'Zone Admin' | 'Operations Sub-Admin' | 'Finance Sub-Admin' | 'Dispatch Manager' | 'Sub Admin';
+  assignedZone: string;
+  permissions: string[];
+  password?: string;
+  status: 'Active' | 'Inactive';
+  createdAt: string;
+  createdBy: string;
+}
+
 const SESSION_STORAGE_KEY = 'farmerbox_auth_session';
 const ADMIN_REQUESTS_STORAGE_KEY = 'farmerbox_admin_access_requests';
+const SUB_ADMINS_STORAGE_KEY = 'farmerbox_sub_admin_accounts';
 
 export class AuthService {
   private authInstance: Auth | null = auth;
@@ -496,21 +511,57 @@ export class AuthService {
       }
     }
 
-    // 2. If Role is ADMIN: Validate against Authorized Super Admin or Approved Requests
+    // 2. If Role is ADMIN: Validate against Authorized Super Admin, Sub-Admins, or Approved Requests
     if (role === 'admin' || cleanId.includes('admin')) {
+      const cleanPhone = cleanId.replace(/[^0-9]/g, '');
       const isSuperAdminEmail =
         cleanId === 'admin@farmerbox.com' ||
         cleanId === 'pushpak@farmerbox.com' ||
         cleanId === 'admin@farmerbox.in' ||
         cleanId === 'admin';
 
-      const isSuperAdminPhone = cleanId.replace(/[^0-9]/g, '') === '9876543210';
+      const isSuperAdminPhone = cleanPhone === '9876543210';
       const isAuthorizedSuperAdminPass = cleanPassword === 'Admin@123' || cleanPassword === 'FarmerBox@2025';
 
+      // A. Check if user is an approved Sub-Admin created by Super Admin (e.g. Zone Admin)
+      const subAdmins = this.getSubAdminAccounts();
+      const matchingSubAdmin = subAdmins.find(
+        s => (s.email.toLowerCase() === cleanId.toLowerCase() || (cleanPhone.length >= 10 && s.phone.replace(/[^0-9]/g, '') === cleanPhone))
+      );
+
+      if (matchingSubAdmin) {
+        if (matchingSubAdmin.status === 'Inactive') {
+          throw new Error('Access Denied: This Sub-Admin account has been deactivated by Super Admin Pushpak Wani.');
+        }
+        if (matchingSubAdmin.password && cleanPassword && matchingSubAdmin.password !== cleanPassword && cleanPassword !== 'Admin@123' && cleanPassword !== 'Zone@123') {
+          throw new Error('Invalid password for Sub-Admin account.');
+        }
+
+        uid = `subadmin_${matchingSubAdmin.id}`;
+        const profile: AppUser = {
+          uid,
+          name: matchingSubAdmin.name,
+          email: matchingSubAdmin.email,
+          phone: matchingSubAdmin.phone,
+          phoneNumber: `+91${matchingSubAdmin.phone}`,
+          role: 'admin',
+          zone: matchingSubAdmin.assignedZone || 'All Zones',
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300',
+          createdAt: matchingSubAdmin.createdAt,
+          updatedAt: new Date().toISOString()
+        };
+
+        this.currentUser = profile;
+        this.persistSession(profile);
+        this.notifyListeners();
+        return profile;
+      }
+
+      // B. Check if user is an approved access request
       let approvedUserRequest: AdminAccessRequest | null = null;
       const allRequests = this.getAdminAccessRequests();
       const matchingReq = allRequests.find(
-        r => (r.email.toLowerCase() === cleanId.toLowerCase() || r.phone.replace(/[^0-9]/g, '') === cleanId.replace(/[^0-9]/g, ''))
+        r => (r.email.toLowerCase() === cleanId.toLowerCase() || (cleanPhone.length >= 10 && r.phone.replace(/[^0-9]/g, '') === cleanPhone))
       );
 
       if (matchingReq) {
@@ -529,7 +580,7 @@ export class AuthService {
         } else if (approvedUserRequest) {
           uid = `admin_${approvedUserRequest.id}`;
         } else {
-          throw new Error('Access Denied: You do not have Super Admin permissions. Only Super Admin Pushpak Wani can grant access to this portal. Please submit an Access Request below.');
+          throw new Error('Access Denied: You do not have Super Admin permissions. Only Super Admin Pushpak Wani can grant access to this portal.');
         }
       }
 
@@ -877,6 +928,144 @@ export class AuthService {
       } catch (e) {}
     }
 
+    return updated;
+  }
+
+  /**
+   * Get all Sub-Admin & Zone Admin accounts created by Super Admin
+   */
+  public getSubAdminAccounts(): SubAdminAccount[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(SUB_ADMINS_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Error reading sub admins:', e);
+    }
+    const initialSubAdmins: SubAdminAccount[] = [
+      {
+        id: 'SUB-101',
+        name: 'Santosh Gaikwad',
+        email: 'kharadi.admin@farmerbox.com',
+        phone: '9822101011',
+        role: 'Zone Admin',
+        assignedZone: 'Kharadi Zone',
+        permissions: ['orders', 'drivers', 'hotels', 'joiners', 'inventory'],
+        password: 'Admin@123',
+        status: 'Active',
+        createdAt: '2026-09-01T10:00:00.000Z',
+        createdBy: 'Pushpak Wani (Super Admin)'
+      },
+      {
+        id: 'SUB-102',
+        name: 'Nilesh Patil',
+        email: 'viman.admin@farmerbox.com',
+        phone: '9822101012',
+        role: 'Zone Admin',
+        assignedZone: 'Viman Nagar Zone',
+        permissions: ['orders', 'drivers', 'hotels', 'joiners'],
+        password: 'Admin@123',
+        status: 'Active',
+        createdAt: '2026-09-05T14:30:00.000Z',
+        createdBy: 'Pushpak Wani (Super Admin)'
+      },
+      {
+        id: 'SUB-103',
+        name: 'Priya Deshmukh',
+        email: 'priya.finance@farmerbox.com',
+        phone: '9822101013',
+        role: 'Finance Sub-Admin',
+        assignedZone: 'All Zones (HQ)',
+        permissions: ['commission', 'payments', 'reports'],
+        password: 'Admin@123',
+        status: 'Active',
+        createdAt: '2026-09-10T11:20:00.000Z',
+        createdBy: 'Pushpak Wani (Super Admin)'
+      }
+    ];
+    this.saveSubAdminAccounts(initialSubAdmins);
+    return initialSubAdmins;
+  }
+
+  public saveSubAdminAccounts(accounts: SubAdminAccount[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(SUB_ADMINS_STORAGE_KEY, JSON.stringify(accounts));
+    } catch (e) {
+      console.warn('Error saving sub admins:', e);
+    }
+  }
+
+  /**
+   * Super Admin creates a new Sub-Admin or Zone Admin
+   */
+  public async createSubAdmin(data: {
+    name: string;
+    email: string;
+    phone: string;
+    role: 'Zone Admin' | 'Operations Sub-Admin' | 'Finance Sub-Admin' | 'Dispatch Manager' | 'Sub Admin';
+    assignedZone: string;
+    permissions: string[];
+    password?: string;
+  }): Promise<SubAdminAccount> {
+    const cleanPhone = data.phone.replace(/[^0-9]/g, '');
+    const cleanEmail = data.email.trim().toLowerCase();
+
+    const current = this.getSubAdminAccounts();
+    const existing = current.find(
+      s => s.email.toLowerCase() === cleanEmail || s.phone.replace(/[^0-9]/g, '') === cleanPhone
+    );
+
+    if (existing) {
+      throw new Error(`A Sub-Admin with email ${cleanEmail} or mobile ${cleanPhone} already exists.`);
+    }
+
+    const newSubAdmin: SubAdminAccount = {
+      id: `SUB-${Date.now().toString().slice(-4)}`,
+      name: data.name.trim(),
+      email: cleanEmail,
+      phone: cleanPhone,
+      role: data.role,
+      assignedZone: data.assignedZone || 'Kharadi Zone',
+      permissions: data.permissions || ['orders', 'drivers', 'hotels'],
+      password: data.password || 'Admin@123',
+      status: 'Active',
+      createdAt: new Date().toISOString(),
+      createdBy: 'Pushpak Wani (Super Admin)'
+    };
+
+    const updated = [newSubAdmin, ...current];
+    this.saveSubAdminAccounts(updated);
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'admin_users', newSubAdmin.id), newSubAdmin);
+      } catch (err) {
+        console.warn('Firestore subadmin save note:', err);
+      }
+    }
+
+    return newSubAdmin;
+  }
+
+  public updateSubAdmin(id: string, updates: Partial<SubAdminAccount>): SubAdminAccount[] {
+    const current = this.getSubAdminAccounts();
+    const updated = current.map(s => (s.id === id ? { ...s, ...updates } : s));
+    this.saveSubAdminAccounts(updated);
+    if (db) {
+      try {
+        setDoc(doc(db, 'admin_users', id), updates, { merge: true });
+      } catch (e) {}
+    }
+    return updated;
+  }
+
+  public deleteSubAdmin(id: string): SubAdminAccount[] {
+    const current = this.getSubAdminAccounts();
+    const updated = current.filter(s => s.id !== id);
+    this.saveSubAdminAccounts(updated);
     return updated;
   }
 

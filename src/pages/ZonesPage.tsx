@@ -19,9 +19,12 @@ import {
   Layers,
   Sparkles,
   Compass,
-  Maximize2
+  Maximize2,
+  UserCheck,
+  Key
 } from 'lucide-react';
 import type { Zone } from '../types';
+import { authService } from '../firebase/authService';
 
 interface PuneZoneGeo {
   id: string;
@@ -869,8 +872,54 @@ export const ZonesPage: React.FC = () => {
                 );
               })()}
 
+              {/* Assigned Zone Admin Card */}
+              {(() => {
+                const subAdmins = authService.getSubAdminAccounts();
+                const zoneAdmin = subAdmins.find(s => s.assignedZone.toLowerCase().includes(activeZone.name.toLowerCase()) || activeZone.name.toLowerCase().includes(s.assignedZone.toLowerCase()));
+                return (
+                  <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4 text-emerald-700" />
+                        <span className="font-extrabold text-xs text-slate-900">Zone Administrator</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('Settings')}
+                        className="text-[10.5px] text-emerald-800 font-bold hover:underline cursor-pointer"
+                      >
+                        Manage in Settings →
+                      </button>
+                    </div>
+
+                    {zoneAdmin ? (
+                      <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-emerald-100 text-xs">
+                        <div>
+                          <p className="font-bold text-slate-900">{zoneAdmin.name}</p>
+                          <p className="text-[11px] text-slate-500">{zoneAdmin.email} • {zoneAdmin.phone}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-100 text-emerald-800">
+                          {zoneAdmin.role}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between text-xs text-slate-500 py-1">
+                        <span>No dedicated Zone Admin assigned yet.</span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('Settings')}
+                          className="px-2.5 py-1 bg-[#15803d] hover:bg-[#166534] text-white text-[10.5px] font-bold rounded-lg shadow-2xs cursor-pointer transition-all"
+                        >
+                          + Create Zone Admin
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Assigned Joiners List */}
-              <div className="space-y-2 pt-2">
+              <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-xs text-slate-800">Assigned Joiners ({displayJoiners.length})</h4>
                   <button
