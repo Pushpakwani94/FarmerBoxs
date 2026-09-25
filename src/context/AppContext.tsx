@@ -308,9 +308,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsAdminLoggedIn(false);
     setIsLogoutConfirmOpen(false);
     setIsAdminProfileOpen(false);
+    setActiveTab('Dashboard');
     if (typeof window !== 'undefined') {
       localStorage.setItem('farmerbox_admin_logged_in', 'false');
+      localStorage.removeItem('farmerbox_admin_email');
     }
+    authService.logout().catch(() => {});
   };
 
   // Admin Profile stored in Firestore 'settings/admin_profile'

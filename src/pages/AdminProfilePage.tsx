@@ -21,12 +21,13 @@ import {
   FileText,
   AlertCircle,
   Sparkles,
-  Link as LinkIcon
+  Link as LinkIcon,
+  LogOut
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const AdminProfilePage: React.FC = () => {
-  const { adminProfile, updateAdminProfile } = useApp();
+  const { adminProfile, updateAdminProfile, logoutAdmin } = useApp();
 
   const [formData, setFormData] = useState({
     name: adminProfile.name,
@@ -148,6 +149,16 @@ export const AdminProfilePage: React.FC = () => {
             Manage your personal profile, security credentials, and system administrator settings.
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => logoutAdmin()}
+          className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 font-bold rounded-xl flex items-center gap-2 cursor-pointer text-xs transition-all shadow-2xs self-start sm:self-auto"
+          title="Sign Out / Logout to Login Page"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out Admin</span>
+        </button>
       </div>
 
       {/* Top Metric Cards (4 Cards) */}

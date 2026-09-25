@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Bell, Menu, Calendar, X, Building2, ShoppingBag, Users } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, Bell, Menu, Calendar, X, Building2, ShoppingBag, Users, LogOut, ChevronDown, User, Settings, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { FirebaseStatusBadge } from './FirebaseStatusBadge';
 
@@ -16,10 +16,24 @@ export const Header: React.FC = () => {
     setSelectedHotel,
     adminProfile,
     setIsAdminProfileOpen,
+    logoutAdmin,
     notifications
   } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const trimmed = searchQuery.trim().toLowerCase();
   const matchingHotels = trimmed ? hotels.filter(h => h.name.toLowerCase().includes(trimmed) || h.zone.toLowerCase().includes(trimmed)).slice(0, 3) : [];
@@ -178,25 +192,98 @@ export const Header: React.FC = () => {
           )}
         </button>
 
-        {/* Admin Profile */}
-        <div
-          onClick={() => setIsAdminProfileOpen(true)}
-          className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-xl hover:bg-emerald-50 border border-transparent hover:border-emerald-200 transition-all"
-          title="Open Admin Profile Settings"
-        >
-          <div className="relative">
-            <img
-              src={adminProfile.avatar}
-              alt={adminProfile.name}
-              className="w-8 h-8 rounded-full object-cover border border-emerald-600 shadow-2xs"
-            />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
-          </div>
-          <div className="hidden sm:block text-left">
-            <p className="text-xs font-bold text-slate-800 leading-tight">{adminProfile.name}</p>
-            <p className="text-[10px] text-emerald-700 font-semibold leading-tight">{adminProfile.role}</p>
-          </div>
+        {/* Pushpak Wani Profile Chip with Dropdown Menu */}
+        <div className="relative" ref={profileMenuRef}>
+          <button
+            type="button"
+            onClick={() => setIsProfileMenuOpen(prev => !prev)}
+            className="flex items-center gap-2.5 cursor-pointer p-1.5 rounded-xl hover:bg-emerald-50 border border-transparent hover:border-emerald-200 transition-all text-left"
+            title="Pushpak Wani (Super Admin) - Click for options"
+          >
+            <div className="relative shrink-0">
+              <img
+                src={adminProfile.avatar}
+                alt={adminProfile.name}
+                className="w-8 h-8 rounded-full object-cover border border-emerald-600 shadow-2xs"
+              />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-xs font-bold text-slate-800 leading-tight">{adminProfile.name}</p>
+              <p className="text-[10px] text-emerald-700 font-semibold leading-tight">{adminProfile.role}</p>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
+          </button>
+
+          {/* Profile Dropdown */}
+          {isProfileMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 select-none">
+              {/* Profile Header */}
+              <div className="px-3 py-2.5 bg-emerald-50/70 rounded-xl mb-1 border border-emerald-100/80">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <p className="text-xs font-extrabold text-slate-900 truncate">{adminProfile.name}</p>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[10px] text-emerald-700 font-bold">{adminProfile.role}</span>
+                  <span className="text-[9px] bg-white px-1.5 py-0.5 rounded text-slate-500 font-mono border border-slate-200">HQ</span>
+                </div>
+              </div>
+
+              {/* Action items */}
+              <div className="space-y-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    setActiveTab('Profile');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-100 font-semibold transition-colors cursor-pointer text-left"
+                >
+                  <User className="w-4 h-4 text-emerald-600" />
+                  <span>My Profile</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    setIsAdminProfileOpen(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-100 font-semibold transition-colors cursor-pointer text-left"
+                >
+                  <Settings className="w-4 h-4 text-slate-500" />
+                  <span>Admin Settings</span>
+                </button>
+
+                <div className="my-1 border-t border-slate-100" />
+
+                {/* Logout Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    logoutAdmin();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-rose-600 hover:bg-rose-50 font-bold transition-colors cursor-pointer text-left"
+                >
+                  <LogOut className="w-4 h-4 text-rose-600" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Dedicated Quick Logout Icon Button in Header */}
+        <button
+          type="button"
+          onClick={() => logoutAdmin()}
+          className="p-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 hover:border-rose-400 rounded-lg transition-all cursor-pointer shadow-2xs"
+          title="Sign Out / Logout to Login Page"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
 
         {/* Date Display */}
         <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-md">

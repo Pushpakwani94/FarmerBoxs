@@ -229,9 +229,16 @@ export const AdminLoginPage: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="font-bold text-slate-700">Password</label>
-                  <span className="text-[11px] text-emerald-700 font-semibold cursor-pointer hover:underline">
-                    Default: Admin@123
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail('admin@farmerbox.com');
+                      setPassword('Admin@123');
+                    }}
+                    className="text-[11px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                  >
+                    Auto-fill: Admin@123
+                  </button>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -280,6 +287,31 @@ export const AdminLoginPage: React.FC = () => {
                   </>
                 )}
               </button>
+
+              {/* 1-Click Demo Login as Super Admin Pushpak Wani */}
+              <div className="pt-3 border-t border-slate-100 text-center">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setEmail('admin@farmerbox.com');
+                    setPassword('Admin@123');
+                    setIsLoading(true);
+                    setErrorMsg(null);
+                    try {
+                      await loginAdmin('admin@farmerbox.com', 'Admin@123');
+                    } catch (err: any) {
+                      setErrorMsg(err.message || 'Failed to authenticate admin.');
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>1-Click Login as Super Admin (Pushpak Wani)</span>
+                </button>
+              </div>
             </form>
           )}
 
