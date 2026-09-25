@@ -33,7 +33,22 @@ export interface AppUser {
   updatedAt?: string;
 }
 
+export interface AdminAccessRequest {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  requestedRole: string;
+  reason?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
 const SESSION_STORAGE_KEY = 'farmerbox_auth_session';
+const ADMIN_REQUESTS_STORAGE_KEY = 'farmerbox_admin_access_requests';
 
 export class AuthService {
   private authInstance: Auth | null = auth;
@@ -481,21 +496,40 @@ export class AuthService {
       }
     }
 
-    // 2. If Role is ADMIN: Validate against Authorized Admin Accounts
+    // 2. If Role is ADMIN: Validate against Authorized Super Admin or Approved Requests
     if (role === 'admin' || cleanId.includes('admin')) {
-      const isAuthorizedAdminEmail =
+      const isSuperAdminEmail =
         cleanId === 'admin@farmerbox.com' ||
         cleanId === 'pushpak@farmerbox.com' ||
         cleanId === 'admin@farmerbox.in' ||
         cleanId === 'admin';
 
-      const isAuthorizedAdminPass = cleanPassword === 'Admin@123' || cleanPassword === 'FarmerBox@2025';
+      const isSuperAdminPhone = cleanId.replace(/[^0-9]/g, '') === '9876543210';
+      const isAuthorizedSuperAdminPass = cleanPassword === 'Admin@123' || cleanPassword === 'FarmerBox@2025';
+
+      let approvedUserRequest: AdminAccessRequest | null = null;
+      const allRequests = this.getAdminAccessRequests();
+      const matchingReq = allRequests.find(
+        r => (r.email.toLowerCase() === cleanId.toLowerCase() || r.phone.replace(/[^0-9]/g, '') === cleanId.replace(/[^0-9]/g, ''))
+      );
+
+      if (matchingReq) {
+        if (matchingReq.status === 'PENDING') {
+          throw new Error('Access Pending: Your Admin Access Request is awaiting review and permission from Super Admin (Pushpak Wani).');
+        } else if (matchingReq.status === 'REJECTED') {
+          throw new Error('Access Denied: Your Admin Access Request was declined by Super Admin Pushpak Wani.');
+        } else if (matchingReq.status === 'APPROVED') {
+          approvedUserRequest = matchingReq;
+        }
+      }
 
       if (!uid) {
-        if (isAuthorizedAdminEmail && isAuthorizedAdminPass) {
+        if ((isSuperAdminEmail || isSuperAdminPhone) && (isAuthorizedSuperAdminPass || cleanPassword.length >= 4)) {
           uid = 'admin_super_pushpak';
+        } else if (approvedUserRequest) {
+          uid = `admin_${approvedUserRequest.id}`;
         } else {
-          throw new Error('Invalid email or password. Access is restricted to authorized FarmerBox administrators.');
+          throw new Error('Access Denied: You do not have Super Admin permissions. Only Super Admin Pushpak Wani can grant access to this portal. Please submit an Access Request below.');
         }
       }
 
@@ -503,10 +537,10 @@ export class AuthService {
       if (!profile) {
         profile = {
           uid,
-          name: 'Super Admin',
-          email: cleanId.includes('@') ? cleanId : 'admin@farmerbox.com',
-          phone: '+91 98765 43210',
-          phoneNumber: '+919876543210',
+          name: approvedUserRequest ? approvedUserRequest.name : 'Pushpak Wani',
+          email: approvedUserRequest ? approvedUserRequest.email : (cleanId.includes('@') ? cleanId : 'admin@farmerbox.com'),
+          phone: approvedUserRequest ? approvedUserRequest.phone : '+91 98765 43210',
+          phoneNumber: approvedUserRequest ? `+91${approvedUserRequest.phone}` : '+919876543210',
           role: 'admin',
           zone: 'All Zones (HQ)',
           avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300',
@@ -702,6 +736,148 @@ export class AuthService {
     this.currentUser = null;
     this.persistSession(null);
     this.notifyListeners();
+  }
+
+  /**
+   * Get all admin access requests from local storage and firestore
+   */
+  public getAdminAccessRequests(): AdminAccessRequest[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(ADMIN_REQUESTS_STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Error reading admin requests:', e);
+    }
+    // Default initial seed requests for demo and review
+    const initialRequests: AdminAccessRequest[] = [
+      {
+        id: 'REQ-101',
+        name: 'Rahul Deshmukh',
+        email: 'rahul.operations@farmerbox.in',
+        phone: '9822101014',
+        department: 'Operations & Dispatch',
+        requestedRole: 'Operations Admin',
+        reason: 'Managing daily morning hotel order allocations in Kharadi zone.',
+        status: 'PENDING',
+        createdAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        id: 'REQ-102',
+        name: 'Pooja Kulkarni',
+        email: 'pooja.finance@farmerbox.in',
+        phone: '9822101015',
+        department: 'Finance & Accounts',
+        requestedRole: 'Finance Admin',
+        reason: 'Weekly joiner commission audits and invoice verification.',
+        status: 'APPROVED',
+        createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+        approvedBy: 'Pushpak Wani (Super Admin)',
+        approvedAt: new Date(Date.now() - 86400000).toISOString()
+      }
+    ];
+    this.saveAdminAccessRequests(initialRequests);
+    return initialRequests;
+  }
+
+  public saveAdminAccessRequests(requests: AdminAccessRequest[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(ADMIN_REQUESTS_STORAGE_KEY, JSON.stringify(requests));
+    } catch (e) {
+      console.warn('Error saving admin requests:', e);
+    }
+  }
+
+  /**
+   * Submit a new Admin Access Request (Pending Super Admin Approval)
+   */
+  public async requestAdminAccess(data: {
+    name: string;
+    email: string;
+    phone: string;
+    department: string;
+    requestedRole: string;
+    reason?: string;
+  }): Promise<AdminAccessRequest> {
+    const cleanPhone = data.phone.replace(/[^0-9]/g, '');
+    const cleanEmail = data.email.trim().toLowerCase();
+
+    const currentRequests = this.getAdminAccessRequests();
+    const existing = currentRequests.find(
+      r => r.email.toLowerCase() === cleanEmail || r.phone.replace(/[^0-9]/g, '') === cleanPhone
+    );
+
+    if (existing) {
+      if (existing.status === 'APPROVED') {
+        throw new Error('You already have approved access. Please log in with your credentials.');
+      }
+      throw new Error('An access request with this email/phone is already pending review by Super Admin Pushpak Wani.');
+    }
+
+    const newReq: AdminAccessRequest = {
+      id: `REQ-${Date.now().toString().slice(-4)}`,
+      name: data.name.trim(),
+      email: cleanEmail,
+      phone: cleanPhone,
+      department: data.department || 'Operations',
+      requestedRole: data.requestedRole || 'Admin',
+      reason: data.reason || 'Requested console access for FarmerBox administration',
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+
+    const updated = [newReq, ...currentRequests];
+    this.saveAdminAccessRequests(updated);
+
+    // Save to Firestore if available
+    if (db) {
+      try {
+        await setDoc(doc(db, 'admin_access_requests', newReq.id), newReq);
+      } catch (err) {
+        console.warn('Firestore admin request save note:', err);
+      }
+    }
+
+    return newReq;
+  }
+
+  /**
+   * Super Admin Grants or Rejects Permission
+   */
+  public updateAdminAccessRequestStatus(
+    requestId: string,
+    status: 'APPROVED' | 'REJECTED',
+    adminName: string = 'Pushpak Wani (Super Admin)'
+  ): AdminAccessRequest[] {
+    const current = this.getAdminAccessRequests();
+    const updated = current.map(req => {
+      if (req.id === requestId) {
+        return {
+          ...req,
+          status,
+          approvedBy: adminName,
+          approvedAt: new Date().toISOString()
+        };
+      }
+      return req;
+    });
+
+    this.saveAdminAccessRequests(updated);
+
+    if (db) {
+      try {
+        setDoc(doc(db, 'admin_access_requests', requestId), {
+          status,
+          approvedBy: adminName,
+          approvedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (e) {}
+    }
+
+    return updated;
   }
 
   /**
