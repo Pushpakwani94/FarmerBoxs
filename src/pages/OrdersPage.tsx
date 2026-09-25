@@ -378,7 +378,7 @@ export const OrdersPage: React.FC = () => {
         <div className={`${showOrderDetailPanel ? 'lg:col-span-7' : 'lg:col-span-12'} bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 transition-all duration-200`}>
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-base text-slate-800">
-              Orders List ({totalFiltered})
+              Orders List ({totalFiltered.toLocaleString('en-IN')})
             </h3>
             <div className="flex items-center gap-2">
               {selectedOrderIds.length > 0 && (

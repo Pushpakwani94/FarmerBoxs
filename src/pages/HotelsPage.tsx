@@ -76,11 +76,11 @@ export const HotelsPage: React.FC = () => {
       ? selectedHotel
       : filteredHotels[0] || hotels[0] || null;
 
-  const totalHotelsCount = isDatabaseConnected ? hotels.length : 555;
-  const activeHotelsCount = isDatabaseConnected ? hotels.filter(h => h.status === 'Active').length : 520;
-  const inactiveHotelsCount = isDatabaseConnected ? hotels.filter(h => h.status !== 'Active').length : 35;
-  const zonesCount = isDatabaseConnected ? zones.length : 12;
-  const joinersCount = isDatabaseConnected ? joiners.length : 26;
+  const totalHotelsCount = hotels.length;
+  const activeHotelsCount = hotels.filter(h => (h.status || 'Active') === 'Active').length;
+  const inactiveHotelsCount = hotels.filter(h => h.status === 'Inactive').length;
+  const zonesCount = zones.length;
+  const joinersCount = joiners.length;
 
   const handleOpenEdit = (h: Hotel) => {
     setEditingHotel(h);

@@ -31,6 +31,22 @@ import { AssignZoneModal } from '../components/Modals/AssignZoneModal';
 import { AssignOrderModal } from '../components/Modals/AssignOrderModal';
 import { ViewDeliveriesModal } from '../components/Modals/ViewDeliveriesModal';
 
+const ZONE_MAP_COORDS: Record<string, { cx: number; cy: number; color: string; ping?: boolean }> = {
+  'kharadi': { cx: 340, cy: 75, color: '#16a34a', ping: true },
+  'viman nagar': { cx: 280, cy: 65, color: '#2563eb' },
+  'hadapsar': { cx: 320, cy: 155, color: '#ea580c' },
+  'magarpatta': { cx: 260, cy: 140, color: '#dc2626' },
+  'hinjawadi': { cx: 80, cy: 80, color: '#9333ea' },
+  'baner': { cx: 140, cy: 60, color: '#0284c7' },
+  'kothrud': { cx: 120, cy: 150, color: '#ca8a04' },
+  'shivajinagar': { cx: 200, cy: 100, color: '#059669' },
+  'wakad': { cx: 100, cy: 110, color: '#e11d48' },
+  'aundh': { cx: 160, cy: 80, color: '#0891b2' },
+  'pimple saudagar': { cx: 150, cy: 40, color: '#7c3aed' },
+  'pimpri chinchwad': { cx: 110, cy: 30, color: '#db2777' },
+  'pimple chinchwad': { cx: 110, cy: 30, color: '#db2777' }
+};
+
 export const DriversPage: React.FC = () => {
   const { drivers, zones, orders, deleteDriver, updateDriver, isDatabaseConnected } = useApp();
 
@@ -55,17 +71,28 @@ export const DriversPage: React.FC = () => {
   // Filter drivers
   const filteredDrivers = drivers.filter(d => {
     const term = searchTerm.toLowerCase().trim();
+    const name = (d.name || '').toLowerCase();
+    const mobile = String(d.mobile || '');
+    const vehicle = (d.vehicleNo || '').toLowerCase();
+    const zone = (d.zone || '').toLowerCase();
+    const status = (d.status || 'Active').toLowerCase();
+
     const matchesSearch =
       !term ||
-      d.name.toLowerCase().includes(term) ||
-      d.mobile.includes(term) ||
-      d.vehicleNo.toLowerCase().includes(term);
+      name.includes(term) ||
+      mobile.includes(term) ||
+      vehicle.includes(term) ||
+      zone.includes(term);
 
     const matchesZone =
-      selectedZoneFilter === 'All Zones' || d.zone.toLowerCase() === selectedZoneFilter.toLowerCase();
+      selectedZoneFilter === 'All Zones' ||
+      zone === selectedZoneFilter.toLowerCase() ||
+      zone.includes(selectedZoneFilter.toLowerCase()) ||
+      selectedZoneFilter.toLowerCase().includes(zone);
 
     const matchesStatus =
-      selectedStatusFilter === 'All Status' || d.status.toLowerCase() === selectedStatusFilter.toLowerCase();
+      selectedStatusFilter === 'All Status' ||
+      status === selectedStatusFilter.toLowerCase();
 
     return matchesSearch && matchesZone && matchesStatus;
   });
@@ -74,24 +101,40 @@ export const DriversPage: React.FC = () => {
   const paginatedDrivers = filteredDrivers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   // Dynamic counts
-  const activeDriversCount = drivers.filter(d => d.status === 'Active').length;
-  const inactiveDriversCount = drivers.filter(d => d.status === 'Inactive').length;
+  const activeDriversCount = drivers.filter(d => (d.status || 'Active') === 'Active').length;
   const onLeaveCount = drivers.filter(d => d.status === 'On Leave').length;
-  const totalDeliveriesCount = orders.length;
-  const completedDeliveriesCount = orders.filter(o => o.status === 'Delivered').length;
+  const inactiveDriversCount = drivers.filter(d => d.status === 'Inactive').length;
+  const totalInactive = inactiveDriversCount + onLeaveCount;
+
+  // Real deliveries count calculated dynamically from live orders or sum of driver deliveries
+  const liveDeliveredOrders = orders.filter(o => o.status === 'Delivered' || o.orderStatus === 'Delivered').length;
+  const totalDeliveriesCount = orders.length > 0
+    ? orders.length
+    : drivers.reduce((sum, d) => sum + (d.totalDeliveries || 0), 0);
+  const completedDeliveriesCount = orders.length > 0
+    ? liveDeliveredOrders
+    : drivers.reduce((sum, d) => sum + (d.completedToday || d.totalDeliveries || 0), 0);
   const successRate = totalDeliveriesCount > 0 ? Math.round((completedDeliveriesCount / totalDeliveriesCount) * 100) : 100;
 
+  // Zone statistics dynamically computed from zones & drivers state
   const zoneStatsList = zones.length > 0
     ? zones.map(z => {
-        const zDrivers = drivers.filter(d => d.zone?.toLowerCase() === z.name?.toLowerCase());
+        const zDrivers = drivers.filter(d =>
+          (d.zone || '').toLowerCase().includes(z.name.toLowerCase()) ||
+          z.name.toLowerCase().includes((d.zone || '').toLowerCase())
+        );
         return {
           zone: z.name,
           total: zDrivers.length,
-          active: zDrivers.filter(d => d.status === 'Active').length,
-          inactive: zDrivers.filter(d => d.status !== 'Active').length
+          active: zDrivers.filter(d => (d.status || 'Active') === 'Active').length,
+          inactive: zDrivers.filter(d => (d.status || 'Active') !== 'Active').length
         };
       })
-    : (isDatabaseConnected ? [] : zoneWiseDriverStats);
+    : [];
+
+  const topActiveZones = zoneStatsList.filter(z => z.total > 0).length > 0
+    ? zoneStatsList.filter(z => z.total > 0)
+    : zoneStatsList.slice(0, 4);
 
   // Handlers
   const handleOpenView = (driver: Driver) => {
@@ -111,7 +154,7 @@ export const DriversPage: React.FC = () => {
   };
 
   const handleToggleStatus = (driver: Driver) => {
-    const nextStatus: Driver['status'] = driver.status === 'Active' ? 'On Leave' : 'Active';
+    const nextStatus: Driver['status'] = (driver.status || 'Active') === 'Active' ? 'On Leave' : 'Active';
     updateDriver(driver.id, { status: nextStatus });
     setActiveDriver(prev => (prev && prev.id === driver.id ? { ...prev, status: nextStatus } : prev));
   };
@@ -155,9 +198,9 @@ export const DriversPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Inactive Drivers</p>
-            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{inactiveDriversCount + onLeaveCount}</h3>
+            <h3 className="text-2xl font-extrabold text-slate-900 leading-none mt-0.5">{totalInactive}</h3>
             <p className="text-[10px] text-amber-700 font-bold mt-1">
-              {drivers.length > 0 ? Math.round(((inactiveDriversCount + onLeaveCount) / drivers.length) * 100) : 0}% of total
+              {drivers.length > 0 ? Math.round((totalInactive / drivers.length) * 100) : 0}% of total
             </p>
           </div>
         </div>
@@ -290,6 +333,12 @@ export const DriversPage: React.FC = () => {
                   ) : (
                     paginatedDrivers.map((driver, idx) => {
                       const displayIndex = (currentPage - 1) * itemsPerPage + idx + 1;
+                      const driverOrders = orders.filter(o =>
+                        (o.driver && driver.name && o.driver.toLowerCase() === driver.name.toLowerCase()) ||
+                        (o.driverPhone && driver.mobile && o.driverPhone === driver.mobile)
+                      );
+                      const driverDeliveries = driverOrders.length > 0 ? driverOrders.length : (driver.totalDeliveries || 0);
+
                       return (
                         <tr
                           key={driver.id}
@@ -302,7 +351,7 @@ export const DriversPage: React.FC = () => {
                           <td className="py-2.5 px-2.5">
                             <div className="flex items-center gap-2.5">
                               <img
-                                src={driver.avatar}
+                                src={driver.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100'}
                                 alt={driver.name}
                                 className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0"
                               />
@@ -327,34 +376,33 @@ export const DriversPage: React.FC = () => {
                           <td className="py-2.5 px-2.5 text-center">
                             <span
                               className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] inline-block ${
-                                driver.status === 'Active'
+                                (driver.status || 'Active') === 'Active'
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : driver.status === 'On Leave'
                                   ? 'bg-amber-100 text-amber-800'
                                   : 'bg-rose-100 text-rose-800'
                               }`}
                             >
-                              {driver.status}
+                              {driver.status || 'Active'}
                             </span>
                           </td>
 
                           {/* Total Deliveries */}
                           <td className="py-2.5 px-2.5 text-center font-bold text-slate-800 text-xs">
-                            {driver.totalDeliveries}
+                            {driverDeliveries}
                           </td>
 
                           {/* Rating */}
                           <td className="py-2.5 px-2.5 text-center font-bold text-amber-600">
                             <span className="flex items-center justify-center gap-1">
                               <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                              <span>{driver.rating.toFixed(1)}</span>
+                              <span>{(driver.rating || 4.8).toFixed(1)}</span>
                             </span>
                           </td>
 
-                          {/* Actions: Eye, Pencil, Trash in rounded squares */}
+                          {/* Actions */}
                           <td className="py-2.5 px-2.5 text-center" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1.5">
-                              {/* Eye */}
                               <button
                                 onClick={() => handleOpenView(driver)}
                                 className="w-6 h-6 rounded bg-sky-50 text-sky-600 hover:bg-sky-100 flex items-center justify-center cursor-pointer transition-colors border border-sky-100"
@@ -363,7 +411,6 @@ export const DriversPage: React.FC = () => {
                                 <Eye className="w-3 h-3" />
                               </button>
 
-                              {/* Edit */}
                               <button
                                 onClick={() => handleOpenEdit(driver)}
                                 className="w-6 h-6 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center cursor-pointer transition-colors border border-emerald-100"
@@ -372,7 +419,6 @@ export const DriversPage: React.FC = () => {
                                 <Edit className="w-3 h-3" />
                               </button>
 
-                              {/* Delete */}
                               <button
                                 onClick={() => handleDeleteDriver(driver)}
                                 className="w-6 h-6 rounded bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center cursor-pointer transition-colors border border-rose-100"
@@ -390,7 +436,7 @@ export const DriversPage: React.FC = () => {
               </table>
             </div>
 
-            {/* Pagination Controls matching screenshot */}
+            {/* Pagination Controls */}
             <div className="flex flex-col sm:flex-row items-center justify-between pt-2 text-xs text-slate-500 gap-3 border-t border-slate-100">
               <span>
                 Showing {filteredDrivers.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to{' '}
@@ -431,11 +477,10 @@ export const DriversPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Actions Bar matching screenshot */}
+          {/* Quick Actions Bar */}
           <div className="space-y-2">
             <h4 className="font-extrabold text-sm text-slate-800">Quick Actions</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* + Add Driver (Green) */}
               <button
                 onClick={() => setIsAddModalOpen(true)}
                 className="py-2.5 px-4 bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
@@ -443,7 +488,6 @@ export const DriversPage: React.FC = () => {
                 <Plus className="w-4 h-4" /> Add Driver
               </button>
 
-              {/* Assign Zone (Blue) */}
               <button
                 onClick={() => setIsAssignZoneOpen(true)}
                 className="py-2.5 px-4 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
@@ -451,7 +495,6 @@ export const DriversPage: React.FC = () => {
                 <MapPin className="w-4 h-4" /> Assign Zone
               </button>
 
-              {/* Assign Order (Purple) */}
               <button
                 onClick={() => setIsAssignOrderOpen(true)}
                 className="py-2.5 px-4 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
@@ -459,7 +502,6 @@ export const DriversPage: React.FC = () => {
                 <Package className="w-4 h-4" /> Assign Order
               </button>
 
-              {/* View Deliveries (Sky) */}
               <button
                 onClick={() => setIsViewDeliveriesOpen(true)}
                 className="py-2.5 px-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
@@ -489,7 +531,6 @@ export const DriversPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              {/* Total Drivers */}
               <div
                 onClick={() => setSelectedStatusFilter('All Status')}
                 className="bg-sky-50/70 hover:bg-sky-50 p-3 rounded-xl border border-sky-100 flex items-center gap-3 cursor-pointer transition-colors"
@@ -503,7 +544,6 @@ export const DriversPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Active Drivers */}
               <div
                 onClick={() => setSelectedStatusFilter('Active')}
                 className="bg-emerald-50/70 hover:bg-emerald-50 p-3 rounded-xl border border-emerald-100 flex items-center gap-3 cursor-pointer transition-colors"
@@ -517,7 +557,6 @@ export const DriversPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* On Leave */}
               <div
                 onClick={() => setSelectedStatusFilter('On Leave')}
                 className="bg-amber-50/70 hover:bg-amber-50 p-3 rounded-xl border border-amber-100 flex items-center gap-3 cursor-pointer transition-colors"
@@ -531,7 +570,6 @@ export const DriversPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Inactive Drivers */}
               <div
                 onClick={() => setSelectedStatusFilter('Inactive')}
                 className="bg-rose-50/70 hover:bg-rose-50 p-3 rounded-xl border border-rose-100 flex items-center gap-3 cursor-pointer transition-colors"
@@ -605,7 +643,7 @@ export const DriversPage: React.FC = () => {
             </table>
           </div>
 
-          {/* Driver Map Panel with Realistic Pune Map & Colored Markers */}
+          {/* Driver Map Panel with Realistic Pune Map & Dynamic Colored Markers */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-extrabold text-sm text-slate-800">Driver Map</h3>
@@ -639,7 +677,7 @@ export const DriversPage: React.FC = () => {
                 {/* Light terrain/district outlines */}
                 <path d="M 10 40 Q 90 20 180 30 T 360 40 L 410 110 L 390 190 L 220 210 L 40 190 Z" fill="#f1f5f9" opacity="0.7" />
 
-                {/* Major Pune Roads (Sinhagad Rd, Nagar Rd, Solapur Rd, Mumbai-Pune Hwy) */}
+                {/* Major Pune Roads */}
                 <path d="M 0 110 Q 120 100 240 115 T 420 110" stroke="#e2e8f0" strokeWidth="6" fill="none" />
                 <path d="M 160 0 Q 180 90 210 220" stroke="#e2e8f0" strokeWidth="5" fill="none" />
                 <path d="M 230 0 Q 250 110 320 220" stroke="#e2e8f0" strokeWidth="4" fill="none" />
@@ -659,69 +697,29 @@ export const DriversPage: React.FC = () => {
                   Pune
                 </text>
 
-                {/* Pin 1: Kharadi (Green Pin - 8 drivers) */}
-                <g
-                  className="cursor-pointer transition-transform hover:scale-110"
-                  onClick={() => { setSelectedZoneFilter('Kharadi'); setCurrentPage(1); }}
-                  onMouseEnter={() => setHoveredMapPin('Kharadi: 8 Drivers (7 Active)')}
-                  onMouseLeave={() => setHoveredMapPin(null)}
-                >
-                  <circle cx="340" cy="75" r="14" fill="#22c55e" fillOpacity="0.2" className="animate-ping" />
-                  <path
-                    d="M 340 60 C 333 60 328 65 328 72 C 328 81 340 92 340 92 C 340 92 352 81 352 72 C 352 65 347 60 340 60 Z"
-                    fill="#16a34a"
-                    filter="url(#pinShadow)"
-                  />
-                  <circle cx="340" cy="71" r="4" fill="#ffffff" />
-                </g>
-
-                {/* Pin 2: Viman Nagar (Blue Pin - 6 drivers) */}
-                <g
-                  className="cursor-pointer transition-transform hover:scale-110"
-                  onClick={() => { setSelectedZoneFilter('Viman Nagar'); setCurrentPage(1); }}
-                  onMouseEnter={() => setHoveredMapPin('Viman Nagar: 6 Drivers (5 Active)')}
-                  onMouseLeave={() => setHoveredMapPin(null)}
-                >
-                  <circle cx="280" cy="65" r="12" fill="#3b82f6" fillOpacity="0.2" />
-                  <path
-                    d="M 280 52 C 273 52 268 57 268 64 C 268 73 280 84 280 84 C 280 84 292 73 292 64 C 292 57 287 52 280 52 Z"
-                    fill="#2563eb"
-                    filter="url(#pinShadow)"
-                  />
-                  <circle cx="280" cy="63" r="4" fill="#ffffff" />
-                </g>
-
-                {/* Pin 3: Hadapsar (Orange Pin - 6 drivers) */}
-                <g
-                  className="cursor-pointer transition-transform hover:scale-110"
-                  onClick={() => { setSelectedZoneFilter('Hadapsar'); setCurrentPage(1); }}
-                  onMouseEnter={() => setHoveredMapPin('Hadapsar: 6 Drivers (5 Active)')}
-                  onMouseLeave={() => setHoveredMapPin(null)}
-                >
-                  <circle cx="320" cy="155" r="12" fill="#f97316" fillOpacity="0.2" />
-                  <path
-                    d="M 320 142 C 313 142 308 147 308 154 C 308 163 320 174 320 174 C 320 174 332 163 332 154 C 332 147 327 142 320 142 Z"
-                    fill="#ea580c"
-                    filter="url(#pinShadow)"
-                  />
-                  <circle cx="320" cy="153" r="4" fill="#ffffff" />
-                </g>
-
-                {/* Pin 4: Magarpatta (Red Pin - 5 drivers) */}
-                <g
-                  className="cursor-pointer transition-transform hover:scale-110"
-                  onClick={() => { setSelectedZoneFilter('Magarpatta'); setCurrentPage(1); }}
-                  onMouseEnter={() => setHoveredMapPin('Magarpatta: 5 Drivers (4 Active)')}
-                  onMouseLeave={() => setHoveredMapPin(null)}
-                >
-                  <circle cx="260" cy="140" r="12" fill="#ef4444" fillOpacity="0.2" />
-                  <path
-                    d="M 260 127 C 253 127 248 132 248 139 C 248 148 260 159 260 159 C 260 159 272 148 272 139 C 272 132 267 127 260 127 Z"
-                    fill="#dc2626"
-                    filter="url(#pinShadow)"
-                  />
-                  <circle cx="260" cy="138" r="4" fill="#ffffff" />
-                </g>
+                {/* Dynamic Zone Pins */}
+                {topActiveZones.map((z, idx) => {
+                  const zKey = z.zone.toLowerCase().trim();
+                  const coords = ZONE_MAP_COORDS[zKey] || { cx: 160 + (idx * 40), cy: 90 + ((idx % 3) * 35), color: '#16a34a' };
+                  return (
+                    <g
+                      key={z.zone}
+                      className="cursor-pointer transition-transform hover:scale-110"
+                      onClick={() => { setSelectedZoneFilter(z.zone); setCurrentPage(1); }}
+                      onMouseEnter={() => setHoveredMapPin(`${z.zone}: ${z.total} Drivers (${z.active} Active)`)}
+                      onMouseLeave={() => setHoveredMapPin(null)}
+                    >
+                      {coords.ping && <circle cx={coords.cx} cy={coords.cy} r="14" fill={coords.color} fillOpacity="0.2" className="animate-ping" />}
+                      <circle cx={coords.cx} cy={coords.cy} r="12" fill={coords.color} fillOpacity="0.2" />
+                      <path
+                        d={`M ${coords.cx} ${coords.cy - 13} C ${coords.cx - 7} ${coords.cy - 13} ${coords.cx - 12} ${coords.cy - 8} ${coords.cx - 12} ${coords.cy - 1} C ${coords.cx - 12} ${coords.cy + 8} ${coords.cx} ${coords.cy + 19} ${coords.cx} ${coords.cy + 19} C ${coords.cx} ${coords.cy + 19} ${coords.cx + 12} ${coords.cy + 8} ${coords.cx + 12} ${coords.cy - 1} C ${coords.cx + 12} ${coords.cy - 8} ${coords.cx + 7} ${coords.cy - 13} ${coords.cx} ${coords.cy - 13} Z`}
+                        fill={coords.color}
+                        filter="url(#pinShadow)"
+                      />
+                      <circle cx={coords.cx} cy={coords.cy - 2} r="4" fill="#ffffff" />
+                    </g>
+                  );
+                })}
               </svg>
 
               {/* Map Hover Tooltip */}
@@ -732,39 +730,22 @@ export const DriversPage: React.FC = () => {
               )}
             </div>
 
-            {/* Map Legend matching screenshot */}
+            {/* Dynamic Map Legend */}
             <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-              <button
-                onClick={() => { setSelectedZoneFilter('Kharadi'); setCurrentPage(1); }}
-                className="flex items-center gap-2 text-slate-700 hover:text-emerald-700 font-medium cursor-pointer"
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A] shrink-0" />
-                <span>Kharadi (8)</span>
-              </button>
-
-              <button
-                onClick={() => { setSelectedZoneFilter('Viman Nagar'); setCurrentPage(1); }}
-                className="flex items-center gap-2 text-slate-700 hover:text-blue-700 font-medium cursor-pointer"
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-[#2563EB] shrink-0" />
-                <span>Viman Nagar (6)</span>
-              </button>
-
-              <button
-                onClick={() => { setSelectedZoneFilter('Hadapsar'); setCurrentPage(1); }}
-                className="flex items-center gap-2 text-slate-700 hover:text-orange-700 font-medium cursor-pointer"
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-[#EA580C] shrink-0" />
-                <span>Hadapsar (6)</span>
-              </button>
-
-              <button
-                onClick={() => { setSelectedZoneFilter('Magarpatta'); setCurrentPage(1); }}
-                className="flex items-center gap-2 text-slate-700 hover:text-red-700 font-medium cursor-pointer"
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-[#DC2626] shrink-0" />
-                <span>Magarpatta (5)</span>
-              </button>
+              {topActiveZones.slice(0, 4).map((z, idx) => {
+                const zKey = z.zone.toLowerCase().trim();
+                const pinColor = ZONE_MAP_COORDS[zKey]?.color || ['#16A34A', '#2563EB', '#EA580C', '#DC2626'][idx % 4];
+                return (
+                  <button
+                    key={z.zone}
+                    onClick={() => { setSelectedZoneFilter(z.zone); setCurrentPage(1); }}
+                    className="flex items-center gap-2 text-slate-700 hover:text-emerald-700 font-medium cursor-pointer"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: pinColor }} />
+                    <span>{z.zone} ({z.total})</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

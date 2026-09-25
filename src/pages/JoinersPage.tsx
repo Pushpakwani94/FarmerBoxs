@@ -285,7 +285,7 @@ export const JoinersPage: React.FC = () => {
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Hotels (Joined)</p>
             <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">
-              {isDatabaseConnected ? hotels.length : 555}
+              {hotels.length}
             </h3>
           </div>
         </div>
@@ -297,7 +297,7 @@ export const JoinersPage: React.FC = () => {
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Orders</p>
             <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">
-              {isDatabaseConnected ? orders.length : 1842}
+              {orders.length}
             </h3>
           </div>
         </div>

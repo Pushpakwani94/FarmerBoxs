@@ -366,7 +366,7 @@ export const ZonesPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Orders (This Month)</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">{orders.length || 1842}</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">{orders.length}</h3>
           </div>
         </div>
 
@@ -376,7 +376,7 @@ export const ZonesPage: React.FC = () => {
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-500">Total Sales (This Month)</p>
-            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{(totalSalesAmount || 3420000).toLocaleString('en-IN')}</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-none mt-0.5">₹{totalSalesAmount.toLocaleString('en-IN')}</h3>
           </div>
         </div>
 
