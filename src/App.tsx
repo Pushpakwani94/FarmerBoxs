@@ -18,7 +18,7 @@ import { AdminProfilePage } from './pages/AdminProfilePage';
 import { JoinerMobileAppManagementPage } from './pages/JoinerMobileAppManagementPage';
 import { CustomerAppManagementPage } from './pages/CustomerAppManagementPage';
 import { DriversPage } from './pages/DriversPage';
-import { AdminLoginPage } from './pages/AdminLoginPage';
+import { LoginPage } from './pages/LoginPage';
 import { CustomerMobileApp } from './customerApp/CustomerMobileApp';
 
 // Modals
@@ -116,7 +116,7 @@ const AdminAppRoot: React.FC = () => {
   const { isAdminLoggedIn } = useApp();
 
   if (!isAdminLoggedIn) {
-    return <AdminLoginPage />;
+    return <LoginPage />;
   }
 
   return <MainContent />;
